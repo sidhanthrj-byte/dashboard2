@@ -1,10 +1,10 @@
-import { getQuote } from '@/lib/store'
+import { dbGetQuote } from "@/lib/db"
 import { notFound } from 'next/navigation'
 import { calculateQuote, fmtINR, formatDims } from '@/lib/calculations'
 import { Printer, Edit, Users, MessageCircle, Mail } from 'lucide-react'
 
-export default function ClientPage({ params }: { params: { id: string } }) {
-  const quote = getQuote(params.id)
+export default async function ClientPage({ params }: { params: { id: string } }) {
+  const quote = await dbGetQuote(params.id)
   if (!quote) notFound()
 
   const bd = calculateQuote(quote)

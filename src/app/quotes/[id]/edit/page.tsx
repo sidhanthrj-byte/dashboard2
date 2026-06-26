@@ -1,9 +1,9 @@
-import { getQuote } from '@/lib/store'
+import { dbGetQuote } from "@/lib/db"
 import { notFound } from 'next/navigation'
 import QuoteBuilder from '@/components/QuoteBuilder'
 
-export default function EditQuotePage({ params }: { params: { id: string } }) {
-  const quote = getQuote(params.id)
+export default async function EditQuotePage({ params }: { params: { id: string } }) {
+  const quote = await dbGetQuote(params.id)
   if (!quote) notFound()
 
   return (

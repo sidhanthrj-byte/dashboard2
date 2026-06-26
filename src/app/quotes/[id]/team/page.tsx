@@ -1,11 +1,11 @@
-import { getQuote } from '@/lib/store'
+import { dbGetQuote } from "@/lib/db"
 import { notFound } from 'next/navigation'
 import { calculateQuote, fmtINR, formatDims, round2 } from '@/lib/calculations'
 import type { ItemBreakdown } from '@/lib/types'
 import { Printer, Edit, Eye } from 'lucide-react'
 
-export default function TeamPage({ params }: { params: { id: string } }) {
-  const quote = getQuote(params.id)
+export default async function TeamPage({ params }: { params: { id: string } }) {
+  const quote = await dbGetQuote(params.id)
   if (!quote) notFound()
 
   const bd = calculateQuote(quote)
