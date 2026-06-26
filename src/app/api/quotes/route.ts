@@ -1,34 +1,43 @@
 import { NextResponse } from 'next/server'
-import { readQuotes, saveQuote, nextQuoteNumber } from '@/lib/store'
+import { dbListQuotes, dbSaveQuote, dbNextQuoteNumber } from '@/lib/db'
 import { v4 as uuid } from 'uuid'
-import type { Quote } from '@/lib/types'
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url)
-  const q = searchParams.get('q')?.toLowerCase() ?? ''
-  let quotes = readQuotes()
-  if (q) {
-    quotes = quotes.filter(
-      quote =>
-        quote.clientName.toLowerCase().includes(q) ||
-        quote.projectName.toLowerCase().includes(q) ||
-        quote.quoteNumber.toLowerCase().includes(q) ||
-        quote.location.toLowerCase().includes(q),
-    )
+  try {
+    const { searchParams } = new URL(request.url)
+    const q = searchParams.get('q')?.toLowerCase() ?? ''
+    let quotes = await dbListQuotes()
+    if (q) {
+      quotes = quotes.filter(
+        quote =>
+          quote.clientName?.toLowerCase().includes(q) ||
+          quote.projectName?.toLowerCase().includes(q) ||
+          quote.quoteNumber?.toLowerCase().includes(q) ||
+          quote.location?.toLowerCase().includes(q),
+      )
+    }
+    return NextResponse.json(quotes)
+  } catch (err) {
+    console.error('GET /api/quotes error:', err)
+    return NextResponse.json({ error: String(err) }, { status: 500 })
   }
-  return NextResponse.json(quotes.sort((a, b) => b.createdAt.localeCompare(a.createdAt)))
 }
 
 export async function POST(request: Request) {
-  const body = await request.json()
-  const now = new Date().toISOString()
-  const quote: Quote = {
-    ...body,
-    id: uuid(),
-    quoteNumber: nextQuoteNumber(),
-    createdAt: now,
-    updatedAt: now,
+  try {
+    const body = await request.json()
+    const now = new Date().toISOString()
+    const quote = {
+      ...body,
+      id: uuid(),
+      quoteNumber: await dbNextQuoteNumber(),
+      createdAt: now,
+      updatedAt: now,
+    }
+    await dbSaveQuote(quote)
+    return NextResponse.json(quote, { status: 201 })
+  } catch (err) {
+    console.error('POST /api/quotes error:', err)
+    return NextResponse.json({ error: String(err) }, { status: 500 })
   }
-  saveQuote(quote)
-  return NextResponse.json(quote, { status: 201 })
 }

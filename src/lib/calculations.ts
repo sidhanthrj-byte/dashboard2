@@ -404,8 +404,11 @@ export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: 
   let ledDetail: LEDDetail | null = null
   if (item.lightType !== 'none') {
     const depthIn = item.lightDepth ?? 6
-    const stripSpacingInches = Math.min(depthIn, 6)
-    const stripCount = Math.max(1, Math.floor(depthIn / 6))
+    const stripSpacingInches = depthIn  // spacing between strips = depth
+    const spacingMM = depthIn * 25.4    // convert inches to mm
+    // strips = ceil(width / spacing) + 1  (one extra for safety, matches Pongs practice)
+    const widthMM = widthM * 1000
+    const stripCount = Math.ceil(widthMM / spacingMM) + 1
     const runningLengthM = lengthM
     const totalRunningMeters = round2(stripCount * runningLengthM)
     const totalWatts = round2(totalRunningMeters * LED_WATTS_PER_M)
@@ -414,7 +417,7 @@ export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: 
     const lKey = ledKey(item)
     const ledPrice = LED[lKey]
     lineItems.push({
-      description: `LED ${lKey} [${stripCount} strip${stripCount > 1 ? 's' : ''} × ${runningLengthM.toFixed(2)}m · 12W/m = ${totalWatts}W]`,
+      description: `LED ${lKey} [${stripCount} strips × ${runningLengthM.toFixed(2)}m · ${LED_WATTS_PER_M}W/m = ${totalWatts}W total]`,
       qty: totalRunningMeters, unit: 'mtr',
       dealerRate: ledPrice.dealer, tierRate: p(ledPrice, tier),
       dealerAmount: round2(totalRunningMeters * ledPrice.dealer),
