@@ -1,12 +1,13 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Save, Loader2, CheckCircle } from 'lucide-react'
+import { Plus, Save, Loader2, CheckCircle, BookUser, Trash2 } from 'lucide-react'
 import { v4 as uuid } from 'uuid'
 import { useRouter } from 'next/navigation'
 import CeilingItemForm, { defaultItem } from './CeilingItemForm'
 import type { Quote, CeilingItem, PriceTier, QuoteDisplayMode } from '@/lib/types'
 import { calculateQuote, fmtINR } from '@/lib/calculations'
+import { listClients, saveClient, deleteClient, type SavedClient } from '@/lib/clients'
 
 interface Props {
   initial?: Quote
@@ -43,6 +44,47 @@ export default function QuoteBuilder({ initial, mode }: Props) {
   )
 
   const [preview, setPreview] = useState<ReturnType<typeof calculateQuote> | null>(null)
+  const [clients, setClients] = useState<SavedClient[]>([])
+  const [showClientBook, setShowClientBook] = useState(false)
+
+  useEffect(() => { setClients(listClients()) }, [])
+
+  function loadClient(c: SavedClient) {
+    setMeta(m => ({
+      ...m,
+      clientName: c.name,
+      clientEmail: c.email,
+      clientPhone: c.phone,
+      location: c.location,
+      priceTier: c.priceTier as PriceTier,
+      markupPercent: c.markupPercent,
+    }))
+    setShowClientBook(false)
+  }
+
+  function saveCurrentClient() {
+    if (!meta.clientName.trim()) { alert('Enter a client name first.'); return }
+    const existing = clients.find(c => c.name.toLowerCase() === meta.clientName.toLowerCase())
+    const client: SavedClient = {
+      id: existing?.id ?? uuid(),
+      name: meta.clientName,
+      email: meta.clientEmail,
+      phone: meta.clientPhone,
+      location: meta.location,
+      priceTier: meta.priceTier,
+      markupPercent: meta.markupPercent,
+      notes: '',
+      createdAt: existing?.createdAt ?? new Date().toISOString(),
+    }
+    saveClient(client)
+    setClients(listClients())
+    alert(`Saved "${client.name}" to client book.`)
+  }
+
+  function removeClient(id: string) {
+    deleteClient(id)
+    setClients(listClients())
+  }
 
   const updatePreview = useCallback(() => {
     try {
@@ -96,6 +138,43 @@ export default function QuoteBuilder({ initial, mode }: Props) {
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
       {/* Main form */}
       <div className="lg:col-span-2 space-y-6">
+
+        {/* Client Book */}
+        <div className="card p-4">
+          <div className="flex items-center justify-between">
+            <button onClick={() => setShowClientBook(v => !v)}
+              className="flex items-center gap-2 text-sm font-medium text-slate-700 hover:text-slate-900">
+              <BookUser size={16} />
+              {showClientBook ? 'Hide Client Book' : 'Load from Client Book'}
+              {clients.length > 0 && (
+                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs">{clients.length}</span>
+              )}
+            </button>
+            <button onClick={saveCurrentClient}
+              className="text-xs text-slate-500 hover:text-slate-800 flex items-center gap-1">
+              <Save size={12} /> Save current client
+            </button>
+          </div>
+          {showClientBook && (
+            <div className="mt-3 space-y-1.5 max-h-48 overflow-y-auto">
+              {clients.length === 0 && (
+                <p className="text-sm text-slate-400 italic">No saved clients yet. Fill in client details above and click &quot;Save current client&quot;.</p>
+              )}
+              {clients.map(c => (
+                <div key={c.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 group">
+                  <button onClick={() => loadClient(c)} className="flex-1 text-left">
+                    <p className="text-sm font-medium text-slate-800">{c.name}</p>
+                    <p className="text-xs text-slate-400">{c.location} · {c.priceTier.toUpperCase()}{c.markupPercent ? ` +${c.markupPercent}%` : ''}</p>
+                  </button>
+                  <button onClick={() => removeClient(c.id)}
+                    className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-rose-500 transition-opacity">
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Project details */}
         <div className="card p-6">
