@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { Search, FileText, Plus, Trash2, Eye, Users, Calendar, MapPin, Copy, TrendingUp, Hash } from 'lucide-react'
+import { Search, FileText, Plus, Trash2, Eye, Users, Calendar, MapPin, Copy, TrendingUp, Hash, BarChart2, IndianRupee, Clock } from 'lucide-react'
 import type { Quote } from '@/lib/types'
 import { fmtINR, calculateQuote } from '@/lib/calculations'
 
@@ -30,9 +30,42 @@ export default function HomePage() {
     return () => clearTimeout(t)
   }, [search, fetchQuotes])
 
-  const totalValue = quotes.reduce((sum, q) => {
+  const totals = quotes.reduce((acc, q) => {
+    try {
+      const bd = calculateQuote(q)
+      acc.value += bd.grandTotal
+      acc.sqft += bd.totalSqft ?? 0
+      acc.count++
+    } catch { /* skip */ }
+    return acc
+  }, { value: 0, sqft: 0, count: 0 })
+
+  const totalValue = totals.value
+  const avgQuoteValue = totals.count > 0 ? totalValue / totals.count : 0
+
+  // Quotes by tier
+  const byTier = quotes.reduce<Record<string, number>>((acc, q) => {
+    acc[q.priceTier] = (acc[q.priceTier] ?? 0) + 1
+    return acc
+  }, {})
+
+  // This month's quotes
+  const thisMonth = new Date().toISOString().slice(0, 7)
+  const thisMonthQuotes = quotes.filter(q => q.date?.startsWith(thisMonth))
+  const thisMonthValue = thisMonthQuotes.reduce((sum, q) => {
     try { return sum + calculateQuote(q).grandTotal } catch { return sum }
   }, 0)
+
+  // Top location
+  const locCount = quotes.reduce<Record<string, number>>((acc, q) => {
+    if (q.location) acc[q.location] = (acc[q.location] ?? 0) + 1
+    return acc
+  }, {})
+  const topLocation = Object.entries(locCount).sort((a, b) => b[1] - a[1])[0]
+
+  // Recent (last 7 days)
+  const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0]
+  const recentCount = quotes.filter(q => q.date >= sevenDaysAgo).length
 
   async function deleteQuote(id: string, name: string) {
     if (!confirm(`Delete quote for "${name}"? This cannot be undone.`)) return
@@ -74,23 +107,75 @@ export default function HomePage() {
       </div>
 
       {!loading && quotes.length > 0 && !search && (
-        <div className="grid grid-cols-2 gap-4 mb-6">
-          <div className="card p-4 flex items-center gap-3">
-            <div className="w-9 h-9 bg-slate-100 rounded-xl flex items-center justify-center shrink-0">
-              <Hash size={18} className="text-slate-600" />
+        <div className="mb-6 space-y-3">
+          {/* Row 1 — key numbers */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="card p-4 flex items-center gap-3">
+              <div className="w-9 h-9 bg-slate-100 rounded-xl flex items-center justify-center shrink-0">
+                <Hash size={16} className="text-slate-600" />
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 font-medium">Total Quotes</p>
+                <p className="text-xl font-bold text-slate-900">{quotes.length}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-xs text-slate-500 font-medium">Total Quotes</p>
-              <p className="text-xl font-bold text-slate-900">{quotes.length}</p>
+            <div className="card p-4 flex items-center gap-3">
+              <div className="w-9 h-9 bg-emerald-50 rounded-xl flex items-center justify-center shrink-0">
+                <TrendingUp size={16} className="text-emerald-600" />
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 font-medium">Pipeline Value</p>
+                <p className="text-xl font-bold text-slate-900">{fmtINR(totalValue)}</p>
+              </div>
+            </div>
+            <div className="card p-4 flex items-center gap-3">
+              <div className="w-9 h-9 bg-blue-50 rounded-xl flex items-center justify-center shrink-0">
+                <IndianRupee size={16} className="text-blue-600" />
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 font-medium">Avg Quote Value</p>
+                <p className="text-xl font-bold text-slate-900">{fmtINR(avgQuoteValue)}</p>
+              </div>
+            </div>
+            <div className="card p-4 flex items-center gap-3">
+              <div className="w-9 h-9 bg-violet-50 rounded-xl flex items-center justify-center shrink-0">
+                <Clock size={16} className="text-violet-600" />
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 font-medium">Last 7 Days</p>
+                <p className="text-xl font-bold text-slate-900">{recentCount} quote{recentCount !== 1 ? 's' : ''}</p>
+              </div>
             </div>
           </div>
-          <div className="card p-4 flex items-center gap-3">
-            <div className="w-9 h-9 bg-emerald-50 rounded-xl flex items-center justify-center shrink-0">
-              <TrendingUp size={18} className="text-emerald-600" />
+
+          {/* Row 2 — this month + breakdown */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="card p-4">
+              <p className="text-xs text-slate-500 font-medium mb-1 flex items-center gap-1"><Calendar size={12} /> This Month</p>
+              <p className="text-lg font-bold text-slate-900">{fmtINR(thisMonthValue)}</p>
+              <p className="text-xs text-slate-400 mt-0.5">{thisMonthQuotes.length} quote{thisMonthQuotes.length !== 1 ? 's' : ''}</p>
             </div>
-            <div>
-              <p className="text-xs text-slate-500 font-medium">Pipeline Value</p>
-              <p className="text-xl font-bold text-slate-900">{fmtINR(totalValue)}</p>
+            <div className="card p-4">
+              <p className="text-xs text-slate-500 font-medium mb-2 flex items-center gap-1"><BarChart2 size={12} /> By Price Tier</p>
+              <div className="space-y-1">
+                {Object.entries(byTier).map(([tier, count]) => (
+                  <div key={tier} className="flex items-center justify-between text-xs">
+                    <span className="text-slate-600 capitalize">{TIER_LABEL[tier] ?? tier}</span>
+                    <span className="font-semibold text-slate-800">{count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="card p-4">
+              <p className="text-xs text-slate-500 font-medium mb-2 flex items-center gap-1"><MapPin size={12} /> Top Location</p>
+              {topLocation ? (
+                <>
+                  <p className="text-lg font-bold text-slate-900">{topLocation[0]}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">{topLocation[1]} quote{topLocation[1] !== 1 ? 's' : ''}</p>
+                </>
+              ) : (
+                <p className="text-sm text-slate-400 italic">—</p>
+              )}
             </div>
           </div>
         </div>
