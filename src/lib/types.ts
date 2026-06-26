@@ -1,23 +1,23 @@
 export type PriceTier = 'dealer' | 'msp' | 'specifiors'
 export type ShapeType = 'rectangle' | 'circle' | 'triangle' | 'l-shape'
-export type UnitSystem = 'feet' | 'meters'
-export type LightType = 'none' | 'single_color' | 'single_color_dimmable' | 'tunable' | 'rgb' | 'rgbw'
+export type UnitSystem = 'mm' | 'feet' | 'meters'
+export type LightType = 'none' | 'single_color' | 'single_color_dimmable' | 'tunable' | 'tunable_dali' | 'rgb' | 'rgbw'
 export type GripperType = 'CW' | 'CC' | 'Profile' | 'Flexible CW' | 'Flexible CC'
 export type LEDWidth = 'standard' | 'wider'
-
-export interface RectDims { length: number; width: number }
-export interface CircleDims { diameter: number }
-export interface TriangleDims { base: number; height: number; side1: number; side2: number; side3: number }
-export interface LShaperDims { length1: number; width1: number; length2: number; width2: number }
-
-export type ShapeDimensions = RectDims | CircleDims | TriangleDims | LShaperDims
-
 export type SurfaceType = 'ceiling' | 'wall'
+export type JointType = 'none' | 'center' | 'off-center'
+export type QuoteDisplayMode = 'total' | 'per-sqft'
+
+export interface TwoDims { dim1: number; dim2: number }
+export interface CircleDims { diameter: number }
+export interface TriangleDims { dim1: number; dim2: number; side1: number; side2: number; side3: number }
+
+export type ShapeDimensions = TwoDims | CircleDims | TriangleDims
 
 export interface CeilingItem {
   id: string
   name: string
-  surface: SurfaceType        // ceiling → CW gripper default, wall → CC gripper default
+  surface: SurfaceType
   shape: ShapeType
   unit: UnitSystem
   dimensions: ShapeDimensions
@@ -25,10 +25,12 @@ export interface CeilingItem {
   withPrinting: boolean
   withFleece: boolean
   lightType: LightType
-  lightDepth: number          // in inches, default 6
+  lightDepth: number
   ledWidth: LEDWidth
   gripperType: GripperType
   quantity: number
+  jointType: JointType
+  jointPosition: number
   notes: string
 }
 
@@ -36,20 +38,23 @@ export interface Quote {
   id: string
   quoteNumber: string
   clientName: string
+  clientEmail: string
+  clientPhone: string
   projectName: string
   location: string
   date: string
   validUntil: string
   priceTier: PriceTier
-  markupPercent: number       // extra markup on top of tier price (0 = none)
+  markupPercent: number
   items: CeilingItem[]
-  installationRatePerSqft: number  // default 60, can be overridden
+  installationRatePerSqft: number
+  transportCost: number
+  includeGst: boolean
+  displayMode: QuoteDisplayMode
   notes: string
   createdAt: string
   updatedAt: string
 }
-
-// Calculation result types
 
 export interface LineItem {
   description: string
@@ -61,38 +66,59 @@ export interface LineItem {
   tierAmount: number
 }
 
-export interface FabricDetail {
+export interface FabricPanel {
   rollWidth: number
   cutLength: number
-  totalArea: number     // sqm billed (includes wastage)
-  usedArea: number      // sqm actual ceiling
+  panelArea: number
+  usedArea: number
   wastageArea: number
   wastagePercent: number
   orientation: string
+  isJoint: boolean
+}
+
+export interface FabricDetail {
+  panels: FabricPanel[]
+  totalBilledArea: number
+  totalUsedArea: number
+  totalWastageArea: number
+  hasJoint: boolean
+  jointPosition: string
+  // legacy compat
+  rollWidth?: number
+  cutLength?: number
+  totalArea?: number
+  usedArea?: number
+  wastageArea?: number
+  wastagePercent?: number
+  orientation?: string
 }
 
 export interface LEDDetail {
   stripCount: number
-  runningLength: number   // length each strip runs along (m)
+  runningLengthM: number
   totalRunningMeters: number
   totalWatts: number
+  stripSpacingInches: number
 }
 
 export interface ItemBreakdown {
   item: CeilingItem
-  lengthM: number
+  dim1M: number
+  dim2M: number
   widthM: number
+  lengthM: number
   areaM2: number
-  areaM2Used: number      // actual ceiling area (no wastage) for installation calc
+  areaM2Used: number
   perimeterM: number
   fabricDetail: FabricDetail
   ledDetail: LEDDetail | null
   lineItems: LineItem[]
-  installationCost: number  // ₹60/sqft on actual area × quantity
+  installationCost: number
   subtotalDealer: number
   subtotalTier: number
-  subtotalFinal: number   // materials after markup
-  itemTotal: number       // subtotalFinal + installationCost
+  subtotalFinal: number
+  itemTotal: number
 }
 
 export interface QuoteBreakdown {
@@ -102,5 +128,10 @@ export interface QuoteBreakdown {
   materialsTotalTier: number
   materialsTotalFinal: number
   totalInstallation: number
+  transportCost: number
+  subtotalBeforeGst: number
+  gstAmount: number
   grandTotal: number
+  totalSqft: number
+  pricePerSqft: number
 }
