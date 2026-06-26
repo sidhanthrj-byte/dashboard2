@@ -1,7 +1,8 @@
 import { dbGetQuote } from "@/lib/db"
 import { notFound } from 'next/navigation'
 import { calculateQuote, fmtINR, formatDims } from '@/lib/calculations'
-import { Printer, Edit, Users, MessageCircle, Mail } from 'lucide-react'
+import { Edit, Users, MessageCircle, Mail } from 'lucide-react'
+import PrintButton from '@/components/PrintButton'
 
 export default async function ClientPage({ params }: { params: { id: string } }) {
   const quote = await dbGetQuote(params.id)
@@ -69,9 +70,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
             className="btn-secondary text-xs gap-1.5">
             <Mail size={14} /> Email
           </a>
-          <button onClick={() => window.print()} className="btn-primary text-xs gap-1.5">
-            <Printer size={14} /> Download PDF
-          </button>
+          <PrintButton />
         </div>
       </div>
 
