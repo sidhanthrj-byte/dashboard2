@@ -1,4 +1,5 @@
-import { createClient } from '@libsql/client'
+import { createClient, type InValue } from '@libsql/client'
+import type { Quote } from './types'
 
 let _client: ReturnType<typeof createClient> | null = null
 
@@ -40,56 +41,72 @@ export async function initQuotesTable() {
   `)
 }
 
-export async function dbListQuotes() {
+export async function dbListQuotes(): Promise<Quote[]> {
   await initQuotesTable()
   const db = getClient()
   const result = await db.execute('SELECT * FROM pongs_quotes ORDER BY created_at DESC')
-  return result.rows.map(rowToQuote)
+  return result.rows.map(rowToQuote) as unknown as Quote[]
 }
 
-export async function dbGetQuote(id: string) {
+export async function dbGetQuote(id: string): Promise<Quote | null> {
   await initQuotesTable()
   const db = getClient()
-  const result = await db.execute({ sql: 'SELECT * FROM pongs_quotes WHERE id = ?', args: [id] })
+  const result = await db.execute(
+    'SELECT * FROM pongs_quotes WHERE id = ?',
+    [id],
+  )
   if (!result.rows.length) return null
-  return rowToQuote(result.rows[0])
+  return rowToQuote(result.rows[0]) as unknown as Quote
 }
 
 export async function dbSaveQuote(quote: Record<string, unknown>) {
   await initQuotesTable()
   const db = getClient()
   const now = new Date().toISOString()
-  await db.execute({
-    sql: `INSERT INTO pongs_quotes (id, quote_number, client_name, project_name, location, date, valid_until,
-          price_tier, markup_percent, installation_rate, transport_cost, include_gst, display_mode,
-          items_json, notes, grand_total, client_email, client_phone, created_at, updated_at)
-          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-          ON CONFLICT(id) DO UPDATE SET
-            client_name=excluded.client_name, project_name=excluded.project_name,
-            location=excluded.location, date=excluded.date, valid_until=excluded.valid_until,
-            price_tier=excluded.price_tier, markup_percent=excluded.markup_percent,
-            installation_rate=excluded.installation_rate, transport_cost=excluded.transport_cost,
-            include_gst=excluded.include_gst, display_mode=excluded.display_mode,
-            items_json=excluded.items_json, notes=excluded.notes, grand_total=excluded.grand_total,
-            client_email=excluded.client_email, client_phone=excluded.client_phone,
-            updated_at=excluded.updated_at`,
-    args: [
-      quote.id, quote.quoteNumber, quote.clientName, quote.projectName ?? null,
-      quote.location ?? null, quote.date, quote.validUntil ?? null,
-      quote.priceTier ?? 'msp', quote.markupPercent ?? 0,
-      quote.installationRate ?? 60, quote.transportCost ?? 0,
-      quote.includeGst ? 1 : 0, quote.displayMode ?? 'total',
-      JSON.stringify(quote.items ?? []), quote.notes ?? null,
-      quote.grandTotal ?? 0, quote.clientEmail ?? null, quote.clientPhone ?? null,
-      quote.createdAt ?? now, now,
-    ],
-  })
+  const args: InValue[] = [
+    String(quote.id ?? ''),
+    String(quote.quoteNumber ?? ''),
+    String(quote.clientName ?? ''),
+    (quote.projectName as string) ?? null,
+    (quote.location as string) ?? null,
+    String(quote.date ?? now),
+    (quote.validUntil as string) ?? null,
+    String(quote.priceTier ?? 'msp'),
+    Number(quote.markupPercent ?? 0),
+    Number(quote.installationRate ?? 60),
+    Number(quote.transportCost ?? 0),
+    quote.includeGst ? 1 : 0,
+    String(quote.displayMode ?? 'total'),
+    JSON.stringify(quote.items ?? []),
+    (quote.notes as string) ?? null,
+    Number(quote.grandTotal ?? 0),
+    (quote.clientEmail as string) ?? null,
+    (quote.clientPhone as string) ?? null,
+    String(quote.createdAt ?? now),
+    now,
+  ]
+  await db.execute(
+    `INSERT INTO pongs_quotes (id, quote_number, client_name, project_name, location, date, valid_until,
+      price_tier, markup_percent, installation_rate, transport_cost, include_gst, display_mode,
+      items_json, notes, grand_total, client_email, client_phone, created_at, updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      ON CONFLICT(id) DO UPDATE SET
+        client_name=excluded.client_name, project_name=excluded.project_name,
+        location=excluded.location, date=excluded.date, valid_until=excluded.valid_until,
+        price_tier=excluded.price_tier, markup_percent=excluded.markup_percent,
+        installation_rate=excluded.installation_rate, transport_cost=excluded.transport_cost,
+        include_gst=excluded.include_gst, display_mode=excluded.display_mode,
+        items_json=excluded.items_json, notes=excluded.notes, grand_total=excluded.grand_total,
+        client_email=excluded.client_email, client_phone=excluded.client_phone,
+        updated_at=excluded.updated_at`,
+    args,
+  )
 }
 
 export async function dbDeleteQuote(id: string) {
   await initQuotesTable()
   const db = getClient()
-  await db.execute({ sql: 'DELETE FROM pongs_quotes WHERE id = ?', args: [id] })
+  await db.execute('DELETE FROM pongs_quotes WHERE id = ?', [id])
 }
 
 export async function dbNextQuoteNumber() {
@@ -105,7 +122,7 @@ export async function dbNextQuoteNumber() {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function rowToQuote(row: any) {
+function rowToQuote(row: any): Record<string, unknown> {
   return {
     id: row.id,
     quoteNumber: row.quote_number,
