@@ -1,4 +1,5 @@
 import { dbGetQuote } from "@/lib/db"
+export const dynamic = 'force-dynamic'
 import { notFound } from 'next/navigation'
 import { calculateQuote, fmtINR, formatDims, round2 } from '@/lib/calculations'
 import type { ItemBreakdown } from '@/lib/types'

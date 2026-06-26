@@ -1,4 +1,5 @@
 import { dbGetQuote } from "@/lib/db"
+export const dynamic = 'force-dynamic'
 import { notFound } from 'next/navigation'
 import { calculateQuote, fmtINR, formatDims } from '@/lib/calculations'
 import { Edit, Users, MessageCircle, Mail } from 'lucide-react'
