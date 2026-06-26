@@ -159,7 +159,7 @@ function getGeometry(item: CeilingItem) {
         widthM, lengthM,
         areaM2: d1M * d2M,
         perimeterM: 2 * (d1M + d2M),
-        dim1MM, dim2MM,
+        dim1MM: d1MM, dim2MM: d2MM,
       }
     }
     case 'circle': {
