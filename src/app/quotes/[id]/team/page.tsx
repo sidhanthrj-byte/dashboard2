@@ -68,13 +68,13 @@ export default function TeamPage({ params }: { params: { id: string } }) {
         </div>
 
         {/* Cost overview */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6 pt-5 border-t border-slate-100">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mt-6 pt-5 border-t border-slate-100">
           <div className="bg-slate-50 rounded-xl p-4">
             <p className="text-xs text-slate-500 mb-1">Dealer Cost</p>
             <p className="text-xl font-bold text-slate-700">{fmtINR(bd.materialsTotalDealer)}</p>
           </div>
           <div className="bg-amber-50 rounded-xl p-4">
-            <p className="text-xs text-amber-600 mb-1">Quoted Price</p>
+            <p className="text-xs text-amber-600 mb-1">Materials (Quoted)</p>
             <p className="text-xl font-bold text-amber-700">{fmtINR(bd.materialsTotalFinal)}</p>
           </div>
           <div className="bg-green-50 rounded-xl p-4">
@@ -82,12 +82,15 @@ export default function TeamPage({ params }: { params: { id: string } }) {
             <p className="text-xl font-bold text-green-700">{fmtINR(margin)}</p>
             <p className="text-xs text-green-500">{marginPct}%</p>
           </div>
-          <div className="bg-slate-50 rounded-xl p-4">
-            <p className="text-xs text-slate-500 mb-1">Grand Total</p>
-            <p className="text-xl font-bold text-slate-900">{fmtINR(bd.grandTotal)}</p>
-            {bd.installationCost > 0 && (
-              <p className="text-xs text-slate-400">incl. installation</p>
-            )}
+          <div className="bg-blue-50 rounded-xl p-4">
+            <p className="text-xs text-blue-600 mb-1">Installation</p>
+            <p className="text-xl font-bold text-blue-700">{fmtINR(bd.totalInstallation)}</p>
+            <p className="text-xs text-blue-400">₹{quote.installationRatePerSqft ?? 60}/sqft</p>
+          </div>
+          <div className="bg-slate-800 rounded-xl p-4">
+            <p className="text-xs text-slate-400 mb-1">Grand Total</p>
+            <p className="text-xl font-bold text-white">{fmtINR(bd.grandTotal)}</p>
+            <p className="text-xs text-slate-400">Excl. GST</p>
           </div>
         </div>
       </div>
@@ -102,19 +105,23 @@ export default function TeamPage({ params }: { params: { id: string } }) {
         <table className="w-full text-sm">
           <tbody>
             <tr className="border-b border-slate-100">
-              <td className="py-2 text-slate-600">Materials (Dealer Cost)</td>
+              <td className="py-2 text-slate-600">Materials — Dealer Cost</td>
               <td className="py-2 text-right font-semibold text-slate-700">{fmtINR(bd.materialsTotalDealer)}</td>
             </tr>
             <tr className="border-b border-slate-100">
-              <td className="py-2 text-slate-600">Materials ({quote.priceTier.toUpperCase()}{quote.markupPercent > 0 ? ` +${quote.markupPercent}%` : ''})</td>
+              <td className="py-2 text-slate-600">
+                Materials — Quoted Price
+                {quote.markupPercent > 0 && <span className="text-xs text-slate-400 ml-1">(+{quote.markupPercent}% markup)</span>}
+              </td>
               <td className="py-2 text-right font-semibold text-slate-700">{fmtINR(bd.materialsTotalFinal)}</td>
             </tr>
-            {bd.installationCost > 0 && (
-              <tr className="border-b border-slate-100">
-                <td className="py-2 text-slate-600">Installation</td>
-                <td className="py-2 text-right font-semibold text-slate-700">{fmtINR(bd.installationCost)}</td>
-              </tr>
-            )}
+            <tr className="border-b border-slate-100">
+              <td className="py-2 text-blue-600 font-medium">
+                Installation Charges
+                <span className="text-xs text-slate-400 font-normal ml-1">(₹{quote.installationRatePerSqft ?? 60}/sqft on actual area)</span>
+              </td>
+              <td className="py-2 text-right font-semibold text-blue-700">{fmtINR(bd.totalInstallation)}</td>
+            </tr>
             <tr>
               <td className="pt-4 font-bold text-slate-900 text-base">Grand Total (Excl. GST)</td>
               <td className="pt-4 text-right font-bold text-amber-600 text-xl">{fmtINR(bd.grandTotal)}</td>
@@ -161,9 +168,10 @@ function ItemBreakdownCard({ bd, index }: { bd: ItemBreakdown; index: number }) 
           </div>
         </div>
         <div className="text-right">
-          <p className="text-xs text-slate-400">Subtotal{hasMultiple ? ` (×${qty})` : ''}</p>
-          <p className="font-bold text-amber-600">{fmtINR(bd.subtotalFinal)}</p>
-          <p className="text-xs text-slate-400">Cost: {fmtINR(bd.subtotalDealer)}</p>
+          <p className="text-xs text-slate-400">Item Total{hasMultiple ? ` (×${qty})` : ''}</p>
+          <p className="font-bold text-amber-600">{fmtINR(bd.itemTotal)}</p>
+          <p className="text-xs text-slate-400">Materials cost: {fmtINR(bd.subtotalDealer)}</p>
+          <p className="text-xs text-blue-500">Installation: {fmtINR(bd.installationCost)}</p>
         </div>
       </div>
 
@@ -215,14 +223,30 @@ function ItemBreakdownCard({ bd, index }: { bd: ItemBreakdown; index: number }) 
             ))}
           </tbody>
           <tfoot>
-            <tr className="border-t-2 border-slate-200 bg-slate-50">
+            <tr className="border-t border-slate-200 bg-slate-50">
               <td colSpan={3} className="px-6 py-3 font-semibold text-slate-700">
-                Subtotal{hasMultiple ? ` (×${qty})` : ''}
+                Materials Subtotal{hasMultiple ? ` (×${qty})` : ''}
               </td>
               <td className="px-4 py-3" />
               <td className="px-4 py-3 text-right font-bold text-slate-700">{fmtINR(bd.subtotalDealer)}</td>
               <td className="px-4 py-3" />
-              <td className="px-6 py-3 text-right font-bold text-amber-600">{fmtINR(bd.subtotalFinal)}</td>
+              <td className="px-6 py-3 text-right font-bold text-slate-700">{fmtINR(bd.subtotalFinal)}</td>
+            </tr>
+            <tr className="bg-blue-50 border-t border-blue-100">
+              <td colSpan={3} className="px-6 py-3 font-semibold text-blue-700">
+                Installation{hasMultiple ? ` (×${qty})` : ''}
+                <span className="text-xs font-normal text-blue-500 ml-1">
+                  ({bd.areaM2Used.toFixed(2)} sqm × {(bd.areaM2Used * 10.7639).toFixed(1)} sqft × ₹{item.quantity > 1 ? '—' : '60'}/sqft)
+                </span>
+              </td>
+              <td className="px-4 py-3" />
+              <td className="px-4 py-3 text-right text-blue-500">—</td>
+              <td className="px-4 py-3" />
+              <td className="px-6 py-3 text-right font-bold text-blue-700">{fmtINR(bd.installationCost)}</td>
+            </tr>
+            <tr className="border-t-2 border-slate-300 bg-amber-50">
+              <td colSpan={6} className="px-6 py-3 font-bold text-slate-800">Item Total</td>
+              <td className="px-6 py-3 text-right font-bold text-amber-600 text-base">{fmtINR(bd.itemTotal)}</td>
             </tr>
           </tfoot>
         </table>

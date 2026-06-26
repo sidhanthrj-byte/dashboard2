@@ -127,14 +127,14 @@ export default function ClientPage({ params }: { params: { id: string } }) {
                 )
               })}
 
-              {bd.installationCost > 0 && (
+              {bd.totalInstallation > 0 && (
                 <tr className="border-b border-slate-100">
                   <td className="py-4 text-slate-400">{bd.itemBreakdowns.length + 1}</td>
                   <td className="py-4">
                     <p className="font-semibold text-slate-800">Installation Charges</p>
                   </td>
                   <td className="py-4 text-right font-semibold text-slate-800">
-                    {fmtINR(bd.installationCost)}
+                    {fmtINR(bd.totalInstallation)}
                   </td>
                 </tr>
               )}
@@ -150,7 +150,7 @@ export default function ClientPage({ params }: { params: { id: string } }) {
               </tr>
               <tr>
                 <td colSpan={3} className="pt-1">
-                  <p className="text-xs text-slate-400 text-right">GST as applicable · Installation extra if not included above</p>
+                  <p className="text-xs text-slate-400 text-right">GST as applicable</p>
                 </td>
               </tr>
             </tfoot>

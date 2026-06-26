@@ -2,7 +2,7 @@
 
 import { Trash2, ChevronDown, ChevronUp } from 'lucide-react'
 import { useState } from 'react'
-import type { CeilingItem, ShapeType, LightType, GripperType, LEDWidth, UnitSystem } from '@/lib/types'
+import type { CeilingItem, ShapeType, LightType, GripperType, LEDWidth, UnitSystem, SurfaceType } from '@/lib/types'
 import { FABRIC } from '@/lib/pricing'
 
 const FABRIC_OPTIONS = Object.keys(FABRIC)
@@ -22,6 +22,7 @@ export function defaultItem(id: string): CeilingItem {
   return {
     id,
     name: '',
+    surface: 'ceiling',
     shape: 'rectangle',
     unit: 'feet',
     dimensions: { length: 0, width: 0 },
@@ -104,8 +105,8 @@ export default function CeilingItemForm({ item, index, onChange, onRemove }: Pro
 
       {open && (
         <div className="px-5 py-5 space-y-6">
-          {/* Row 1: Name + Quantity */}
-          <div className="grid grid-cols-3 gap-4">
+          {/* Row 1: Name + Surface + Quantity */}
+          <div className="grid grid-cols-4 gap-4">
             <div className="col-span-2">
               <label className="label">Item Name / Location</label>
               <input
@@ -114,6 +115,29 @@ export default function CeilingItemForm({ item, index, onChange, onRemove }: Pro
                 value={item.name}
                 onChange={e => set('name', e.target.value)}
               />
+            </div>
+            <div>
+              <label className="label">Surface</label>
+              <div className="flex gap-2">
+                {(['ceiling', 'wall'] as SurfaceType[]).map(s => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => {
+                      // Auto-set gripper to CW for ceiling, CC for wall
+                      const defaultGripper: GripperType = s === 'ceiling' ? 'CW' : 'CC'
+                      onChange({ ...item, surface: s, gripperType: defaultGripper })
+                    }}
+                    className={`flex-1 py-2 rounded-lg border text-xs font-semibold transition-all ${
+                      item.surface === s
+                        ? 'border-amber-400 bg-amber-50 text-amber-800'
+                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                    }`}
+                  >
+                    {s.charAt(0).toUpperCase() + s.slice(1)}
+                  </button>
+                ))}
+              </div>
             </div>
             <div>
               <label className="label">Quantity</label>

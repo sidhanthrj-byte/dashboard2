@@ -7,6 +7,7 @@ import {
   FABRIC, PRINTING, GRIPPER, LED, LED_WATTS_PER_M,
   STANDARD_DRIVERS, DALI2_DRIVE_200W, DT8_150W,
   CONTROLS, FLEECE, ROLL_WIDTHS, p,
+  INSTALLATION_RATE_PER_SQFT, SQFT_PER_SQM,
 } from './pricing'
 
 const FT = 0.3048  // feet to metres
@@ -284,14 +285,13 @@ export function calculateItem(item: CeilingItem, tier: PriceTier): ItemBreakdown
     const runningLength = Math.max(lengthM, widthM)   // strips run along longer side
     const totalRunningMeters = round2(stripCount * runningLength)
     const lKey = ledKey(item)
-    const wattsPerM = LED_WATTS_PER_M[lKey] ?? 5
-    const totalWatts = round2(totalRunningMeters * wattsPerM)
+    const totalWatts = round2(totalRunningMeters * LED_WATTS_PER_M)  // 12W per metre
 
     ledDetail = { stripCount, runningLength, totalRunningMeters, totalWatts }
 
     const ledPrice = LED[lKey]
     lineItems.push({
-      description: `LED ${lKey}  [${stripCount} strip${stripCount > 1 ? 's' : ''} × ${runningLength.toFixed(2)}m]`,
+      description: `LED ${lKey}  [${stripCount} strip${stripCount > 1 ? 's' : ''} × ${runningLength.toFixed(2)}m · 12W/m = ${totalWatts}W]`,
       qty: totalRunningMeters, unit: 'mtr',
       dealerRate: ledPrice.dealer, tierRate: p(ledPrice, tier),
       dealerAmount: round2(totalRunningMeters * ledPrice.dealer),
@@ -305,28 +305,47 @@ export function calculateItem(item: CeilingItem, tier: PriceTier): ItemBreakdown
   const subtotalDealer = lineItems.reduce((s, l) => s + l.dealerAmount, 0)
   const subtotalTier   = lineItems.reduce((s, l) => s + l.tierAmount,   0)
 
+  // ─── Installation: ₹60/sqft on actual ceiling area × quantity ──────────────
+  const installationRate = INSTALLATION_RATE_PER_SQFT
+  const areaM2Used = areaM2  // actual ceiling area (no wastage added for installation)
+  const installationCost = round2(areaM2Used * SQFT_PER_SQM * installationRate * item.quantity)
+
+  const subtotalFinal = round2(subtotalTier * item.quantity)
+
   return {
     item,
     ...geo,
+    areaM2Used,
     fabricDetail,
     ledDetail,
     lineItems,
-    subtotalDealer:  round2(subtotalDealer  * item.quantity),
-    subtotalTier:    round2(subtotalTier    * item.quantity),
-    subtotalFinal:   round2(subtotalTier    * item.quantity),
+    installationCost,
+    subtotalDealer:  round2(subtotalDealer * item.quantity),
+    subtotalTier:    round2(subtotalTier   * item.quantity),
+    subtotalFinal,
+    itemTotal: round2(subtotalFinal + installationCost),
   }
 }
 
 export function calculateQuote(quote: Quote): QuoteBreakdown {
   const tier = quote.priceTier
-  const itemBreakdowns = quote.items.map(item => calculateItem(item, tier))
+  const rate = quote.installationRatePerSqft ?? INSTALLATION_RATE_PER_SQFT
+  const itemBreakdowns = quote.items.map(item => {
+    const bd = calculateItem(item, tier)
+    // Recalculate installation if quote has a custom rate
+    if (rate !== INSTALLATION_RATE_PER_SQFT) {
+      const inst = round2(bd.areaM2Used * SQFT_PER_SQM * rate * item.quantity)
+      return { ...bd, installationCost: inst, itemTotal: round2(bd.subtotalFinal + inst) }
+    }
+    return bd
+  })
 
   const materialsTotalDealer = round2(itemBreakdowns.reduce((s, b) => s + b.subtotalDealer, 0))
   const materialsTotalTier   = round2(itemBreakdowns.reduce((s, b) => s + b.subtotalTier,   0))
   const markupFactor = 1 + (quote.markupPercent ?? 0) / 100
   const materialsTotalFinal  = round2(materialsTotalTier * markupFactor)
-  const installationCost     = quote.installationCharge ?? 0
-  const grandTotal           = round2(materialsTotalFinal + installationCost)
+  const totalInstallation    = round2(itemBreakdowns.reduce((s, b) => s + b.installationCost, 0))
+  const grandTotal           = round2(materialsTotalFinal + totalInstallation)
 
   return {
     quote,
@@ -334,7 +353,7 @@ export function calculateQuote(quote: Quote): QuoteBreakdown {
     materialsTotalDealer,
     materialsTotalTier,
     materialsTotalFinal,
-    installationCost,
+    totalInstallation,
     grandTotal,
   }
 }

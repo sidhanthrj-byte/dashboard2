@@ -12,9 +12,12 @@ export interface LShaperDims { length1: number; width1: number; length2: number;
 
 export type ShapeDimensions = RectDims | CircleDims | TriangleDims | LShaperDims
 
+export type SurfaceType = 'ceiling' | 'wall'
+
 export interface CeilingItem {
   id: string
   name: string
+  surface: SurfaceType        // ceiling → CW gripper default, wall → CC gripper default
   shape: ShapeType
   unit: UnitSystem
   dimensions: ShapeDimensions
@@ -40,7 +43,7 @@ export interface Quote {
   priceTier: PriceTier
   markupPercent: number       // extra markup on top of tier price (0 = none)
   items: CeilingItem[]
-  installationCharge: number  // flat amount
+  installationRatePerSqft: number  // default 60, can be overridden
   notes: string
   createdAt: string
   updatedAt: string
@@ -80,13 +83,16 @@ export interface ItemBreakdown {
   lengthM: number
   widthM: number
   areaM2: number
+  areaM2Used: number      // actual ceiling area (no wastage) for installation calc
   perimeterM: number
   fabricDetail: FabricDetail
   ledDetail: LEDDetail | null
   lineItems: LineItem[]
+  installationCost: number  // ₹60/sqft on actual area × quantity
   subtotalDealer: number
   subtotalTier: number
-  subtotalFinal: number   // after markup
+  subtotalFinal: number   // materials after markup
+  itemTotal: number       // subtotalFinal + installationCost
 }
 
 export interface QuoteBreakdown {
@@ -95,6 +101,6 @@ export interface QuoteBreakdown {
   materialsTotalDealer: number
   materialsTotalTier: number
   materialsTotalFinal: number
-  installationCost: number
+  totalInstallation: number
   grandTotal: number
 }

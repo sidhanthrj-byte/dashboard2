@@ -29,7 +29,7 @@ export default function QuoteBuilder({ initial, mode }: Props) {
     validUntil: initial?.validUntil ?? validUntil,
     priceTier: (initial?.priceTier ?? 'msp') as PriceTier,
     markupPercent: initial?.markupPercent ?? 0,
-    installationCharge: initial?.installationCharge ?? 0,
+    installationRatePerSqft: initial?.installationRatePerSqft ?? 60,
     notes: initial?.notes ?? '',
   })
 
@@ -38,19 +38,16 @@ export default function QuoteBuilder({ initial, mode }: Props) {
   )
 
   // Live preview calculation
-  const [preview, setPreview] = useState<{ total: number; items: number } | null>(null)
+  const [preview, setPreview] = useState<{ total: number; items: number; installation: number } | null>(null)
 
   const updatePreview = useCallback(() => {
     const fakeQuote: Quote = {
-      id: '',
-      quoteNumber: '',
-      createdAt: '',
-      updatedAt: '',
+      id: '', quoteNumber: '', createdAt: '', updatedAt: '',
       ...meta,
       items,
     }
     const bd = calculateQuote(fakeQuote)
-    setPreview({ total: bd.grandTotal, items: items.length })
+    setPreview({ total: bd.grandTotal, items: items.length, installation: bd.totalInstallation })
   }, [meta, items])
 
   useEffect(() => {
@@ -176,10 +173,11 @@ export default function QuoteBuilder({ initial, mode }: Props) {
                 onChange={e => setMeta(m => ({ ...m, markupPercent: parseFloat(e.target.value) || 0 }))} />
             </div>
             <div>
-              <label className="label">Installation Charge (₹)</label>
+              <label className="label">Installation Rate (₹/sqft)</label>
               <input type="number" min="0" className="input"
-                value={meta.installationCharge}
-                onChange={e => setMeta(m => ({ ...m, installationCharge: parseFloat(e.target.value) || 0 }))} />
+                value={meta.installationRatePerSqft}
+                onChange={e => setMeta(m => ({ ...m, installationRatePerSqft: parseFloat(e.target.value) || 0 }))} />
+              <p className="text-xs text-slate-400 mt-1">Auto-calculated per item from actual ceiling area</p>
             </div>
           </div>
         </div>
@@ -230,7 +228,7 @@ export default function QuoteBuilder({ initial, mode }: Props) {
               <>
                 <div className="space-y-2 mb-4">
                   {items.map((item, idx) => {
-                    const fakeQ: Quote = { id: '', quoteNumber: '', createdAt: '', updatedAt: '', ...meta, items: [item] }
+                    const fakeQ: Quote = { id: '', quoteNumber: '', createdAt: '', updatedAt: '', ...meta, installationRatePerSqft: meta.installationRatePerSqft, items: [item] }
                     const bd = calculateQuote(fakeQ)
                     return (
                       <div key={item.id} className="flex justify-between items-center text-sm py-1.5 border-b border-slate-100 last:border-0">
@@ -242,10 +240,10 @@ export default function QuoteBuilder({ initial, mode }: Props) {
                     )
                   })}
                 </div>
-                {meta.installationCharge > 0 && (
-                  <div className="flex justify-between text-sm py-1.5 text-slate-500">
-                    <span>Installation</span>
-                    <span>{fmtINR(meta.installationCharge)}</span>
+                {preview.installation > 0 && (
+                  <div className="flex justify-between text-sm py-1.5 text-slate-500 border-t border-slate-100 mt-1 pt-2">
+                    <span>Installation (₹{meta.installationRatePerSqft}/sqft)</span>
+                    <span>{fmtINR(preview.installation)}</span>
                   </div>
                 )}
                 <div className="flex justify-between items-center pt-3 border-t border-slate-200 mt-2">
@@ -253,9 +251,7 @@ export default function QuoteBuilder({ initial, mode }: Props) {
                   <span className="text-xl font-bold text-amber-600">{fmtINR(preview.total)}</span>
                 </div>
                 <p className="text-xs text-slate-400 mt-2">
-                  {meta.priceTier.toUpperCase()} pricing
-                  {meta.markupPercent > 0 ? ` + ${meta.markupPercent}% markup` : ''}
-                  {' · '}Excl. GST
+                  {meta.markupPercent > 0 ? `+${meta.markupPercent}% markup · ` : ''}Excl. GST
                 </p>
               </>
             ) : (
