@@ -2,8 +2,9 @@ import { dbGetQuote } from "@/lib/db"
 export const dynamic = 'force-dynamic'
 import { notFound } from 'next/navigation'
 import { calculateQuote, fmtINR, formatDims } from '@/lib/calculations'
-import { Edit, Users, MessageCircle, Mail } from 'lucide-react'
+import { Edit, Users } from 'lucide-react'
 import PrintButton from '@/components/PrintButton'
+import SharePDF from '@/components/SharePDF'
 
 export default async function ClientPage({ params }: { params: { id: string } }) {
   const quote = await dbGetQuote(params.id)
@@ -63,20 +64,18 @@ export default async function ClientPage({ params }: { params: { id: string } })
           <a href={`/quotes/${quote.id}/edit`} className="btn-secondary text-xs gap-1.5">
             <Edit size={14} /> Edit
           </a>
-          <a href={waUrl} target="_blank" rel="noopener noreferrer"
-            className="btn-secondary text-xs gap-1.5 text-emerald-700 border-emerald-200 hover:bg-emerald-50">
-            <MessageCircle size={14} /> WhatsApp
-          </a>
-          <a href={mailUrl}
-            className="btn-secondary text-xs gap-1.5">
-            <Mail size={14} /> Email
-          </a>
           <PrintButton />
+          <SharePDF
+            quoteNumber={quote.quoteNumber}
+            clientName={quote.clientName}
+            waUrl={waUrl}
+            mailUrl={mailUrl}
+          />
         </div>
       </div>
 
       {/* ─── Page 1: Quotation ─── */}
-      <div className="max-w-3xl mx-auto print:max-w-none">
+      <div id="quote-printable" className="max-w-3xl mx-auto print:max-w-none">
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-10 mb-0 print:shadow-none print:border-0 print:rounded-none print:p-8">
 
           {/* Company header */}
