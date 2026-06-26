@@ -40,6 +40,12 @@ export async function initQuotesTable() {
       updated_at TEXT DEFAULT (datetime('now'))
     )
   `)
+  // Migrate: add status column if it doesn't exist yet
+  try {
+    await db.execute(`ALTER TABLE pongs_quotes ADD COLUMN status TEXT DEFAULT 'draft'`)
+  } catch {
+    // Column already exists — ignore
+  }
 }
 
 export async function dbListQuotes(): Promise<Quote[]> {
