@@ -3,8 +3,9 @@
 import { useEffect, useState, useCallback } from 'react'
 import {
   Search, FileText, Plus, Trash2, Eye, Users, Calendar, MapPin,
-  Copy, TrendingUp, Hash, BarChart2, IndianRupee, Clock, Edit3,
+  Copy, TrendingUp, Hash, IndianRupee, Edit3,
   CheckCircle2, SendHorizontal, XCircle, AlertCircle, ChevronDown,
+  ArrowUpRight, Filter,
 } from 'lucide-react'
 import type { Quote } from '@/lib/types'
 import { fmtINR, calculateQuote } from '@/lib/calculations'
@@ -22,6 +23,18 @@ const STATUS_ICONS: Record<QuoteStatus, React.ReactNode> = {
   sent: <SendHorizontal size={10} />,
   approved: <CheckCircle2 size={10} />,
   rejected: <XCircle size={10} />,
+}
+const STATUS_COLORS: Record<QuoteStatus, string> = {
+  draft: 'bg-gray-100 text-gray-700',
+  sent: 'bg-blue-50 text-blue-700',
+  approved: 'bg-emerald-50 text-emerald-700',
+  rejected: 'bg-rose-50 text-rose-600',
+}
+const STATUS_ICON_COLORS: Record<QuoteStatus, string> = {
+  draft: 'bg-gray-100 text-gray-500',
+  sent: 'bg-blue-50 text-blue-600',
+  approved: 'bg-emerald-50 text-emerald-600',
+  rejected: 'bg-rose-50 text-rose-500',
 }
 
 function getStatus(quote: Quote): QuoteStatus {
@@ -50,7 +63,6 @@ export default function HomePage() {
     return () => clearTimeout(t)
   }, [search, fetchQuotes])
 
-  // Stats
   const totals = quotes.reduce((acc, q) => {
     try {
       const bd = calculateQuote(q)
@@ -71,11 +83,13 @@ export default function HomePage() {
   const locCount = quotes.reduce<Record<string, number>>((acc, q) => {
     if (q.location) acc[q.location] = (acc[q.location] ?? 0) + 1; return acc
   }, {})
-  const topLocation = Object.entries(locCount).sort((a, b) => b[1] - a[1])[0]
   const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0]
   const recentCount = quotes.filter(q => q.date >= sevenDaysAgo).length
   const approvedValue = quotes.filter(q => getStatus(q) === 'approved')
     .reduce((s, q) => { try { return s + calculateQuote(q).grandTotal } catch { return s } }, 0)
+  const conversionRate = quotes.length > 0
+    ? Math.round((quotes.filter(q => getStatus(q) === 'approved').length / quotes.length) * 100)
+    : 0
 
   const filtered = statusFilter === 'all' ? quotes : quotes.filter(q => getStatus(q) === statusFilter)
 
@@ -118,14 +132,18 @@ export default function HomePage() {
     window.location.href = `/quotes/${created.id}/edit`
   }
 
+  const showStats = !loading && quotes.length > 0 && !search
+
   return (
     <div className="space-y-6">
+
       {/* Page header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between pt-1">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Dashboard</h1>
-          <p className="text-sm text-slate-500 mt-0.5">
-            {loading ? 'Loading…' : `${quotes.length} quote${quotes.length !== 1 ? 's' : ''} total`}
+          <h1 className="text-2xl font-black text-gray-900 tracking-tight">Dashboard</h1>
+          <p className="text-sm text-gray-400 mt-0.5 font-medium">
+            {loading ? 'Loading…' : `${quotes.length} quote${quotes.length !== 1 ? 's' : ''}`}
+            {!loading && recentCount > 0 && ` · ${recentCount} this week`}
           </p>
         </div>
         <a href="/quotes/new" className="btn-primary gap-2">
@@ -133,131 +151,173 @@ export default function HomePage() {
         </a>
       </div>
 
-      {/* Stats */}
-      {!loading && quotes.length > 0 && !search && (
-        <div className="space-y-3">
+      {/* Stats Grid */}
+      {showStats && (
+        <div className="space-y-4">
+          {/* Primary stats */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {[
-              { label: 'Total Quotes', value: quotes.length, sub: `${recentCount} this week`, icon: <Hash size={17} />, bg: 'bg-slate-100', fg: 'text-slate-600' },
-              { label: 'Pipeline Value', value: fmtINR(totals.value), sub: `avg ${fmtINR(avgQuoteValue)}`, icon: <TrendingUp size={17} />, bg: 'bg-emerald-50', fg: 'text-emerald-600' },
-              { label: 'Won Value', value: fmtINR(approvedValue), sub: 'approved quotes', icon: <CheckCircle2 size={17} />, bg: 'bg-blue-50', fg: 'text-blue-600' },
-              { label: 'This Month', value: fmtINR(thisMonthValue), sub: `${thisMonthQuotes.length} quotes`, icon: <Calendar size={17} />, bg: 'bg-violet-50', fg: 'text-violet-600' },
+              {
+                label: 'Total Quotes',
+                value: quotes.length,
+                sub: `avg ${fmtINR(avgQuoteValue)}`,
+                icon: <Hash size={16} />,
+                color: 'text-gray-600',
+                bg: 'bg-gray-100',
+              },
+              {
+                label: 'Pipeline',
+                value: fmtINR(totals.value),
+                sub: `${totals.sqft.toFixed(0)} sqft total`,
+                icon: <TrendingUp size={16} />,
+                color: 'text-blue-600',
+                bg: 'bg-blue-50',
+              },
+              {
+                label: 'Won Value',
+                value: fmtINR(approvedValue),
+                sub: `${conversionRate}% conversion`,
+                icon: <CheckCircle2 size={16} />,
+                color: 'text-emerald-600',
+                bg: 'bg-emerald-50',
+              },
+              {
+                label: 'This Month',
+                value: fmtINR(thisMonthValue),
+                sub: `${thisMonthQuotes.length} quotes`,
+                icon: <Calendar size={16} />,
+                color: 'text-violet-600',
+                bg: 'bg-violet-50',
+              },
             ].map(s => (
-              <div key={s.label} className="card p-5 flex items-center gap-4">
-                <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${s.bg}`}>
-                  <span className={s.fg}>{s.icon}</span>
+              <div key={s.label} className="card p-5">
+                <div className="flex items-start justify-between mb-3">
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${s.bg}`}>
+                    <span className={s.color}>{s.icon}</span>
+                  </div>
+                  <ArrowUpRight size={13} className="text-gray-300 mt-0.5" />
                 </div>
-                <div className="min-w-0">
-                  <p className="text-xs text-slate-500 font-medium">{s.label}</p>
-                  <p className="text-lg font-bold text-slate-900 leading-tight">{s.value}</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5">{s.sub}</p>
-                </div>
+                <p className="text-xl font-black text-gray-900 tracking-tight leading-none mb-1">{s.value}</p>
+                <p className="text-[11px] text-gray-400 font-medium">{s.label}</p>
+                <p className="text-[10px] text-gray-300 mt-0.5">{s.sub}</p>
               </div>
             ))}
           </div>
 
+          {/* Secondary insights */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {/* Tier breakdown with mini bar */}
-            <div className="card p-5">
-              <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                <BarChart2 size={12} /> By Price Tier
-              </p>
-              <div className="space-y-2.5">
-                {Object.entries(byTier).map(([tier, count]) => (
-                  <div key={tier}>
-                    <div className="flex justify-between text-xs mb-1">
-                      <span className="text-slate-600">{TIER_LABEL[tier] ?? tier}</span>
-                      <span className="font-semibold text-slate-800">{count}</span>
-                    </div>
-                    <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                      <div className="h-full bg-slate-400 rounded-full"
-                        style={{ width: `${(count / quotes.length) * 100}%` }} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
 
-            {/* Status breakdown */}
+            {/* Status breakdown — clickable */}
             <div className="card p-5">
-              <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider mb-3">Quote Status</p>
+              <p className="text-[11px] font-bold text-gray-400 tracking-widest uppercase mb-4">Status</p>
               <div className="grid grid-cols-2 gap-2">
                 {(['draft','sent','approved','rejected'] as QuoteStatus[]).map(s => {
                   const n = quotes.filter(q => getStatus(q) === s).length
+                  const active = statusFilter === s
                   return (
                     <button key={s} onClick={() => setStatusFilter(prev => prev === s ? 'all' : s)}
-                      className={`text-left p-2.5 rounded-xl border transition-all ${statusFilter === s ? 'border-slate-400 bg-slate-50' : 'border-slate-100 hover:border-slate-200'}`}>
-                      <p className="text-lg font-bold text-slate-900">{n}</p>
-                      <p className={`text-[11px] font-semibold mt-0.5 ${STATUS_CLASS[s].includes('emerald') ? 'text-emerald-600' : STATUS_CLASS[s].includes('blue') ? 'text-blue-600' : STATUS_CLASS[s].includes('rose') ? 'text-rose-500' : 'text-slate-500'}`}>
-                        {STATUS_LABELS[s]}
-                      </p>
+                      className={`text-left p-3 rounded-xl border-2 transition-all ${active ? 'border-gray-900 bg-gray-50' : 'border-transparent bg-gray-50/60 hover:bg-gray-50 hover:border-gray-200'}`}>
+                      <p className="text-lg font-black text-gray-900 leading-none">{n}</p>
+                      <p className="text-[10px] font-semibold text-gray-400 mt-1.5 uppercase tracking-wide">{STATUS_LABELS[s]}</p>
                     </button>
                   )
                 })}
               </div>
             </div>
 
-            {/* Top location */}
+            {/* Tier breakdown */}
             <div className="card p-5">
-              <p className="text-xs text-slate-500 font-semibold uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                <MapPin size={12} /> Top Locations
-              </p>
-              <div className="space-y-2">
-                {Object.entries(locCount).sort((a,b) => b[1]-a[1]).slice(0,4).map(([loc, n]) => (
-                  <div key={loc} className="flex items-center justify-between text-sm">
-                    <span className="text-slate-700 truncate">{loc}</span>
-                    <span className="text-xs font-semibold text-slate-500 shrink-0 ml-2">{n}</span>
+              <p className="text-[11px] font-bold text-gray-400 tracking-widest uppercase mb-4">By Tier</p>
+              <div className="space-y-3">
+                {Object.entries(byTier).map(([tier, count]) => (
+                  <div key={tier}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className={`${TIER_CLASS[tier] ?? 'badge-draft'} text-[10px]`}>{TIER_LABEL[tier] ?? tier}</span>
+                      <span className="text-xs font-bold text-gray-700">{count}</span>
+                    </div>
+                    <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-full bg-gray-800 rounded-full transition-all"
+                        style={{ width: `${(count / quotes.length) * 100}%` }} />
+                    </div>
                   </div>
                 ))}
-                {Object.keys(locCount).length === 0 && <p className="text-sm text-slate-400">—</p>}
+                {Object.keys(byTier).length === 0 && <p className="text-sm text-gray-300">—</p>}
+              </div>
+            </div>
+
+            {/* Locations */}
+            <div className="card p-5">
+              <p className="text-[11px] font-bold text-gray-400 tracking-widest uppercase mb-4 flex items-center gap-1.5">
+                <MapPin size={11} /> Locations
+              </p>
+              <div className="space-y-2.5">
+                {Object.entries(locCount).sort((a,b) => b[1]-a[1]).slice(0,5).map(([loc, n], i) => (
+                  <div key={loc} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-[10px] text-gray-300 font-semibold w-3">{i+1}</span>
+                      <span className="text-sm text-gray-700 truncate font-medium">{loc}</span>
+                    </div>
+                    <span className="text-xs font-bold text-gray-400 shrink-0 ml-2">{n}</span>
+                  </div>
+                ))}
+                {Object.keys(locCount).length === 0 && <p className="text-sm text-gray-300">No locations yet</p>}
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Search + filter bar */}
-      <div className="flex flex-col sm:flex-row gap-3">
+      {/* Search + filter */}
+      <div className="flex flex-col sm:flex-row gap-3 items-start">
         <div className="relative flex-1 max-w-md">
-          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input className="input pl-10" placeholder="Search client, project, quote #, location…"
+          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input className="input pl-10 text-sm" placeholder="Search client, project, quote #, location…"
             value={search} onChange={e => setSearch(e.target.value)} />
         </div>
         {statusFilter !== 'all' && (
           <button onClick={() => setStatusFilter('all')}
             className="btn-secondary text-xs gap-2 self-start">
-            <XCircle size={13} /> Clear filter: {STATUS_LABELS[statusFilter]}
+            <Filter size={12} /> {STATUS_LABELS[statusFilter]}
+            <XCircle size={12} />
           </button>
         )}
       </div>
 
       {/* Quote list */}
       {loading ? (
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           {[1,2,3].map(i => (
-            <div key={i} className="card p-5 animate-pulse h-24">
-              <div className="h-4 bg-slate-100 rounded-lg w-1/3 mb-3" />
-              <div className="h-3 bg-slate-100 rounded-lg w-1/2" />
+            <div key={i} className="card p-5 animate-pulse">
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 bg-gray-100 rounded-xl" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-3.5 bg-gray-100 rounded-lg w-1/3" />
+                  <div className="h-3 bg-gray-50 rounded-lg w-1/2" />
+                </div>
+                <div className="h-3 bg-gray-100 rounded w-20" />
+              </div>
             </div>
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="card p-20 text-center">
-          <FileText size={44} className="text-slate-200 mx-auto mb-4" />
-          <p className="text-slate-500 font-semibold">
-            {search ? 'No quotes match your search' : statusFilter !== 'all' ? `No ${STATUS_LABELS[statusFilter].toLowerCase()} quotes` : 'No quotes yet'}
+        <div className="card p-16 text-center">
+          <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+            <FileText size={28} className="text-gray-300" />
+          </div>
+          <p className="text-gray-700 font-bold text-base">
+            {search ? 'No results found' : statusFilter !== 'all' ? `No ${STATUS_LABELS[statusFilter].toLowerCase()} quotes` : 'No quotes yet'}
           </p>
-          <p className="text-slate-400 text-sm mt-1">
-            {!search && statusFilter === 'all' && 'Create your first quote to get started'}
+          <p className="text-gray-400 text-sm mt-1">
+            {!search && statusFilter === 'all' ? 'Create your first quote to get started' : search ? 'Try a different search term' : ''}
           </p>
           {!search && statusFilter === 'all' && (
-            <a href="/quotes/new" className="btn-primary mt-5 inline-flex">
+            <a href="/quotes/new" className="btn-primary mt-6 inline-flex">
               <Plus size={15} /> Create first quote
             </a>
           )}
         </div>
       ) : (
-        <div className="space-y-2.5">
+        <div className="space-y-2">
           {filtered.map(quote => (
             <QuoteCard
               key={quote.id}
@@ -294,83 +354,81 @@ function QuoteCard({ quote, deleting, duplicating, onDelete, onDuplicate, onStat
     && new Date(quote.validUntil) > new Date()
 
   return (
-    <div className="card p-5 flex flex-col sm:flex-row sm:items-center gap-4 hover:shadow-md hover:border-slate-300 transition-all duration-200">
-      {/* Status dot + icon */}
-      <div className="shrink-0">
-        <div className={`w-11 h-11 rounded-2xl flex items-center justify-center
-          ${status === 'approved' ? 'bg-emerald-50' : status === 'sent' ? 'bg-blue-50' : status === 'rejected' ? 'bg-rose-50' : 'bg-slate-100'}`}>
-          <FileText size={18} className={
-            status === 'approved' ? 'text-emerald-600' : status === 'sent' ? 'text-blue-600' : status === 'rejected' ? 'text-rose-500' : 'text-slate-500'
-          } />
-        </div>
+    <div className="card-hover p-4 flex flex-col sm:flex-row sm:items-center gap-4 group">
+
+      {/* Status icon */}
+      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${STATUS_ICON_COLORS[status]}`}>
+        <FileText size={17} />
       </div>
 
       {/* Main info */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap mb-1">
-          <span className="font-bold text-slate-900 text-[15px]">{quote.clientName}</span>
-          <span className="badge badge-draft text-[11px]">{quote.quoteNumber}</span>
-          <span className={`${TIER_CLASS[quote.priceTier] ?? 'badge-draft'} text-[11px]`}>
+          <span className="font-bold text-gray-900 text-sm">{quote.clientName}</span>
+          <span className="text-[10px] font-semibold text-gray-300 font-mono">{quote.quoteNumber}</span>
+          <span className={`${TIER_CLASS[quote.priceTier] ?? 'badge-draft'}`}>
             {TIER_LABEL[quote.priceTier]}
           </span>
-          {/* Status badge with dropdown */}
+
+          {/* Status dropdown */}
           <div className="relative">
             <button onClick={() => setShowStatusMenu(v => !v)}
-              className={`${STATUS_CLASS[status]} flex items-center gap-1 text-[11px] cursor-pointer hover:opacity-80`}>
+              className={`${STATUS_CLASS[status]} flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity`}>
               {STATUS_ICONS[status]}
               {STATUS_LABELS[status]}
               <ChevronDown size={9} />
             </button>
             {showStatusMenu && (
-              <div className="absolute top-full left-0 mt-1 w-32 bg-white border border-slate-200 rounded-xl shadow-lg z-10 py-1 overflow-hidden">
+              <div className="absolute top-full left-0 mt-1.5 w-36 bg-white border border-gray-200 rounded-xl shadow-xl z-10 py-1.5 overflow-hidden">
                 {(['draft','sent','approved','rejected'] as QuoteStatus[]).map(s => (
                   <button key={s} onClick={() => { onStatusChange(s); setShowStatusMenu(false) }}
-                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 flex items-center gap-2">
+                    className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 flex items-center gap-2 font-medium text-gray-700">
                     {STATUS_ICONS[s]} {STATUS_LABELS[s]}
                   </button>
                 ))}
               </div>
             )}
           </div>
+
           {grandTotal > 0 && (
-            <span className="font-bold text-slate-900 text-sm ml-1">{fmtINR(grandTotal)}</span>
+            <span className="font-black text-gray-900 text-sm">{fmtINR(grandTotal)}</span>
           )}
         </div>
 
         {quote.projectName && (
-          <p className="text-sm text-slate-600 truncate">{quote.projectName}</p>
+          <p className="text-sm text-gray-500 truncate">{quote.projectName}</p>
         )}
 
-        <div className="flex items-center gap-4 mt-1.5 text-xs text-slate-400 flex-wrap">
-          <span className="flex items-center gap-1"><Calendar size={11} />{date}</span>
-          {quote.location && <span className="flex items-center gap-1"><MapPin size={11} />{quote.location}</span>}
+        <div className="flex items-center gap-3.5 mt-1.5 text-[11px] text-gray-400 flex-wrap font-medium">
+          <span className="flex items-center gap-1"><Calendar size={10} />{date}</span>
+          {quote.location && <span className="flex items-center gap-1"><MapPin size={10} />{quote.location}</span>}
           <span>{itemCount} item{itemCount !== 1 ? 's' : ''}</span>
           {isExpiring && (
-            <span className="flex items-center gap-1 text-rose-500 font-medium">
-              <AlertCircle size={11} /> Expiring soon
+            <span className="flex items-center gap-1 text-amber-500 font-semibold">
+              <AlertCircle size={10} /> Expiring soon
             </span>
           )}
-          {quote.includeGst && <span className="text-slate-400">GST incl.</span>}
+          {quote.includeGst && <span className="text-gray-300">GST incl.</span>}
         </div>
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
-        <a href={`/quotes/${quote.id}/client`} className="btn-primary text-xs px-3 py-1.5 gap-1.5">
-          <Eye size={13} /> Client PDF
+      <div className="flex items-center gap-1 shrink-0 opacity-80 group-hover:opacity-100 transition-opacity">
+        <a href={`/quotes/${quote.id}/client`} className="btn-primary text-xs px-3 py-2 gap-1.5">
+          <Eye size={12} /> View PDF
         </a>
-        <a href={`/quotes/${quote.id}/team`} className="btn-secondary text-xs px-3 py-1.5 gap-1.5">
-          <Users size={13} /> Team
+        <a href={`/quotes/${quote.id}/team`} className="btn-secondary text-xs px-3 py-2 gap-1.5">
+          <Users size={12} /> Team
         </a>
-        <a href={`/quotes/${quote.id}/edit`} className="btn-ghost text-xs px-2.5 py-1.5 gap-1">
+        <a href={`/quotes/${quote.id}/edit`} className="btn-ghost text-xs px-2.5 py-2" title="Edit">
           <Edit3 size={13} />
         </a>
         <button onClick={onDuplicate} disabled={duplicating}
-          className="btn-ghost text-xs px-2.5 py-1.5" title="Duplicate">
+          className="btn-ghost text-xs px-2.5 py-2" title="Duplicate">
           <Copy size={13} />
         </button>
         <button onClick={onDelete} disabled={deleting}
-          className="btn-ghost text-xs px-2.5 py-1.5 text-rose-400 hover:text-rose-600 hover:bg-rose-50" title="Delete">
+          className="btn-ghost text-xs px-2.5 py-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50" title="Delete">
           <Trash2 size={13} />
         </button>
       </div>

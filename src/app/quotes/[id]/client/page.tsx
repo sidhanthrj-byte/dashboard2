@@ -48,21 +48,21 @@ export default async function ClientPage({ params }: { params: { id: string } })
 
   return (
     <div>
-      {/* Action bar — no-print */}
+      {/* Action bar */}
       <div className="no-print flex items-center justify-between mb-6">
-        <div className="flex items-center gap-2 text-sm text-slate-400">
-          <a href="/" className="hover:text-slate-600">Quotes</a>
-          <span>/</span>
-          <span className="text-slate-600">{quote.quoteNumber}</span>
-          <span>/</span>
-          <span className="font-medium text-slate-800">Client View</span>
+        <div className="flex items-center gap-2 text-xs text-gray-400">
+          <a href="/" className="hover:text-gray-700 transition-colors">Quotes</a>
+          <span className="text-gray-300">/</span>
+          <span className="text-gray-600 font-medium">{quote.quoteNumber}</span>
+          <span className="text-gray-300">/</span>
+          <span className="font-semibold text-gray-800">Client View</span>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <a href={`/quotes/${quote.id}/team`} className="btn-secondary text-xs gap-1.5">
-            <Users size={14} /> Team View
+            <Users size={13} /> Team View
           </a>
           <a href={`/quotes/${quote.id}/edit`} className="btn-secondary text-xs gap-1.5">
-            <Edit size={14} /> Edit
+            <Edit size={13} /> Edit
           </a>
           <PrintButton />
           <SharePDF
@@ -75,260 +75,279 @@ export default async function ClientPage({ params }: { params: { id: string } })
       </div>
 
       {/* ─── Page 1: Quotation ─── */}
-      <div id="quote-printable" className="max-w-3xl mx-auto print:max-w-none">
-        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-10 mb-0 print:shadow-none print:border-0 print:rounded-none print:p-8">
+      <div id="quote-printable" className="max-w-[720px] mx-auto print:max-w-none font-[Inter,system-ui,sans-serif]">
+        <div className="bg-white rounded-2xl shadow-[0_2px_16px_0_rgb(0,0,0,0.08)] overflow-hidden print:shadow-none print:rounded-none">
 
-          {/* Company header */}
-          <div className="flex items-start justify-between mb-8 pb-7 border-b-2 border-slate-900">
+          {/* Hero header bar */}
+          <div className="bg-gray-900 px-10 py-8 flex items-end justify-between">
             <div>
-              <h1 className="text-4xl font-black text-slate-900 tracking-tight leading-none">PONGS</h1>
-              <p className="text-xs font-semibold text-slate-500 tracking-[0.25em] mt-1">STRETCH CEILING SYSTEMS</p>
-              <div className="mt-3 text-xs text-slate-500 space-y-0.5">
-                <p className="font-medium text-slate-700">Sidharth Trading Co.</p>
-                <p>Bengaluru, Karnataka</p>
-                <p>GST: [GST Number]</p>
-                <p>Ph: [Phone Number]</p>
+              <p className="text-gray-500 text-[10px] font-semibold tracking-[0.3em] uppercase mb-1">Next Level Solutions</p>
+              <h1 className="text-white font-black text-4xl tracking-tighter leading-none">PONGS</h1>
+              <p className="text-gray-400 text-[11px] font-medium tracking-[0.25em] mt-1.5">STRETCH CEILING SYSTEMS</p>
+            </div>
+            <div className="text-right">
+              <p className="text-gray-500 text-[10px] font-semibold tracking-[0.2em] uppercase mb-1">Quotation</p>
+              <p className="text-white text-2xl font-bold tracking-tight">{quote.quoteNumber}</p>
+              <p className="text-gray-400 text-xs mt-2">{dateStr}</p>
+              {validStr && <p className="text-gray-500 text-[11px] mt-0.5">Valid till {validStr}</p>}
+            </div>
+          </div>
+
+          {/* Thin accent line */}
+          <div className="h-0.5 bg-gradient-to-r from-gray-300 via-gray-100 to-gray-300" />
+
+          <div className="px-10 py-8">
+
+            {/* Client + Project row */}
+            <div className="grid grid-cols-2 gap-5 mb-9">
+              <div className="border border-gray-100 rounded-xl p-5 bg-gray-50/60">
+                <p className="text-[10px] font-bold text-gray-400 tracking-[0.2em] uppercase mb-3">Prepared For</p>
+                <p className="font-black text-gray-900 text-xl leading-tight tracking-tight">{quote.clientName}</p>
+                {quote.clientPhone && <p className="text-gray-500 text-sm mt-1.5 font-medium">{quote.clientPhone}</p>}
+                {quote.clientEmail && <p className="text-gray-400 text-xs mt-0.5">{quote.clientEmail}</p>}
+              </div>
+              <div className="border border-gray-100 rounded-xl p-5 bg-gray-50/60">
+                <p className="text-[10px] font-bold text-gray-400 tracking-[0.2em] uppercase mb-3">Project Details</p>
+                {quote.projectName
+                  ? <p className="font-bold text-gray-900 text-base leading-tight">{quote.projectName}</p>
+                  : <p className="text-gray-400 text-sm italic">No project name</p>}
+                {quote.location && <p className="text-gray-500 text-sm mt-1.5">{quote.location}</p>}
               </div>
             </div>
-            <div className="text-right">
-              <p className="text-xs text-slate-400 uppercase tracking-widest font-semibold mb-1">Quotation</p>
-              <p className="text-2xl font-bold text-slate-900">{quote.quoteNumber}</p>
-              <p className="text-xs text-slate-500 mt-2">Date: {dateStr}</p>
-              {validStr && <p className="text-xs text-slate-400 mt-0.5">Valid until: {validStr}</p>}
-            </div>
-          </div>
 
-          {/* Client details box */}
-          <div className="grid grid-cols-2 gap-6 mb-8">
-            <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Prepared For</p>
-              <p className="font-bold text-slate-900 text-lg leading-tight">{quote.clientName}</p>
-              {quote.clientPhone && <p className="text-slate-600 text-sm mt-0.5">{quote.clientPhone}</p>}
-              {quote.clientEmail && <p className="text-slate-500 text-xs mt-0.5">{quote.clientEmail}</p>}
-            </div>
-            <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Project Details</p>
-              {quote.projectName && <p className="font-semibold text-slate-800">{quote.projectName}</p>}
-              {quote.location && <p className="text-slate-500 text-sm mt-0.5">{quote.location}</p>}
-            </div>
-          </div>
+            {/* Items table */}
+            <div className="mb-8">
+              {/* Table header */}
+              <div className="grid grid-cols-[2rem_1fr_8rem] gap-0 border-b-2 border-gray-900 pb-2.5 mb-0">
+                <span className="text-[10px] font-bold text-gray-500 tracking-widest uppercase">#</span>
+                <span className="text-[10px] font-bold text-gray-500 tracking-widest uppercase">Description</span>
+                <span className="text-[10px] font-bold text-gray-500 tracking-widest uppercase text-right">Amount</span>
+              </div>
 
-          {/* Items table */}
-          <div className="mb-8">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b-2 border-slate-900">
-                  <th className="text-left py-3 text-xs font-bold text-slate-900 uppercase tracking-wide w-8">#</th>
-                  <th className="text-left py-3 text-xs font-bold text-slate-900 uppercase tracking-wide">Description</th>
-                  <th className="text-right py-3 text-xs font-bold text-slate-900 uppercase tracking-wide w-28">Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {bd.itemBreakdowns.map((itemBd, idx) => {
-                  const item = itemBd.item
-                  const hasLights = item.lightType !== 'none'
-                  return (
-                    <tr key={item.id} className="border-b border-slate-100">
-                      <td className="py-4 text-slate-400 align-top text-xs">{idx + 1}</td>
-                      <td className="py-4 align-top pr-4">
-                        <p className="font-semibold text-slate-900">
-                          Stretch Ceiling — {item.name || `Item ${idx + 1}`}
-                          {item.quantity > 1 && <span className="text-slate-400 font-normal"> ×{item.quantity}</span>}
-                        </p>
-                        <p className="text-slate-500 text-xs mt-0.5">
-                          {item.fabricType} · {formatDims(item)}
-                        </p>
-                        {hasLights && (
-                          <p className="text-slate-500 text-xs mt-0.5">
-                            With {lightLabel[item.lightType] ?? 'LED Cove Lighting'}
-                            {item.lightDepth ? ` (${item.lightDepth}\" depth)` : ''}
-                          </p>
-                        )}
-                        {item.withPrinting && (
-                          <p className="text-slate-500 text-xs mt-0.5">With custom printing</p>
-                        )}
-                        {item.withFleece && (
-                          <p className="text-slate-500 text-xs mt-0.5">With felt pad / fleece backing</p>
-                        )}
-                        {item.notes && (
-                          <p className="text-slate-400 text-xs mt-0.5 italic">{item.notes}</p>
-                        )}
-                      </td>
-                      <td className="py-4 text-right font-semibold text-slate-900 align-top">
-                        {fmtINR(itemBd.subtotalFinal)}
-                      </td>
-                    </tr>
-                  )
-                })}
-
-                {/* Installation is bundled into item prices — not shown separately */}
-
-                {bd.transportCost > 0 && (
-                  <tr className="border-b border-slate-100">
-                    <td className="py-4 text-slate-400 text-xs">{bd.itemBreakdowns.length + 2}</td>
-                    <td className="py-4">
-                      <p className="font-semibold text-slate-900">Transport &amp; Logistics</p>
-                    </td>
-                    <td className="py-4 text-right font-semibold text-slate-900">{fmtINR(bd.transportCost)}</td>
-                  </tr>
-                )}
-              </tbody>
-              <tfoot>
-                {bd.gstAmount > 0 && (
-                  <tr className="border-t border-slate-200">
-                    <td colSpan={2} className="pt-3 text-slate-600">Subtotal</td>
-                    <td className="pt-3 text-right text-slate-700 font-semibold">{fmtINR(bd.subtotalBeforeGst)}</td>
-                  </tr>
-                )}
-                {bd.gstAmount > 0 && (
-                  <tr>
-                    <td colSpan={2} className="py-1 text-slate-600">GST 18%</td>
-                    <td className="py-1 text-right text-slate-700 font-semibold">{fmtINR(bd.gstAmount)}</td>
-                  </tr>
-                )}
-                <tr className="border-t-2 border-slate-900">
-                  <td colSpan={2} className="pt-4 font-bold text-slate-900 text-lg">
-                    Grand Total
-                    {quote.includeGst
-                      ? <span className="text-xs font-normal text-slate-500 ml-2">(Incl. GST)</span>
-                      : <span className="text-xs font-normal text-slate-500 ml-2">(Excl. GST)</span>
-                    }
-                  </td>
-                  <td className="pt-4 text-right font-black text-slate-900 text-2xl">
-                    {fmtINR(bd.grandTotal)}
-                  </td>
-                </tr>
-                {quote.displayMode === 'per-sqft' && bd.totalSqft > 0 && (
-                  <tr>
-                    <td colSpan={3} className="pt-2">
-                      <p className="text-xs text-slate-500 text-right">
-                        Total area: {bd.totalSqft.toFixed(1)} sqft · Rate: {fmtINR(bd.pricePerSqft)}/sqft
+              {bd.itemBreakdowns.map((itemBd, idx) => {
+                const item = itemBd.item
+                const hasLights = item.lightType !== 'none'
+                return (
+                  <div key={item.id} className="grid grid-cols-[2rem_1fr_8rem] gap-0 py-5 border-b border-gray-100 items-start">
+                    <span className="text-xs text-gray-300 font-semibold pt-0.5">{String(idx + 1).padStart(2, '0')}</span>
+                    <div className="pr-6">
+                      <p className="font-bold text-gray-900 text-sm leading-snug">
+                        Stretch Ceiling
+                        {item.name ? ` — ${item.name}` : ` — Item ${idx + 1}`}
+                        {item.quantity > 1 && <span className="text-gray-400 font-normal"> ×{item.quantity}</span>}
                       </p>
-                    </td>
-                  </tr>
-                )}
-              </tfoot>
-            </table>
-          </div>
+                      <p className="text-gray-500 text-xs mt-1 leading-relaxed">
+                        {item.fabricType} · {formatDims(item)}
+                      </p>
+                      {hasLights && (
+                        <p className="text-gray-500 text-xs mt-0.5">
+                          {lightLabel[item.lightType] ?? 'LED Cove Lighting'}
+                          {item.lightDepth ? ` · ${item.lightDepth}" cove depth` : ''}
+                        </p>
+                      )}
+                      {item.withPrinting && (
+                        <p className="text-gray-500 text-xs mt-0.5">Custom digital printing</p>
+                      )}
+                      {item.withFleece && (
+                        <p className="text-gray-500 text-xs mt-0.5">With fleece / felt pad backing</p>
+                      )}
+                      {item.notes && (
+                        <p className="text-gray-400 text-xs mt-1 italic">{item.notes}</p>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-gray-900 text-sm">{fmtINR(itemBd.subtotalFinal)}</p>
+                    </div>
+                  </div>
+                )
+              })}
 
-          {/* What's included box */}
-          <div className="mb-8 p-4 border border-slate-200 rounded-lg">
-            <p className="text-xs font-bold text-slate-700 uppercase tracking-wide mb-2">This Quotation Includes</p>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Premium PONGS / Descor stretch ceiling fabric
-              {hasGripper ? ', aluminium gripper profiles (CW/CC)' : ''}
-              {hasLighting ? ', LED strip lighting, electronic drivers, controllers &amp; remotes' : ''}
-              {hasPrinting ? ', custom digital printing' : ''}
-              , and professional installation by certified technicians.
-            </p>
-          </div>
-
-          {/* Custom notes */}
-          {quote.notes && (
-            <div className="mb-6 p-4 bg-slate-50 rounded-lg border border-slate-100">
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Terms &amp; Notes</p>
-              <p className="text-xs text-slate-600 whitespace-pre-line leading-relaxed">{quote.notes}</p>
+              {bd.transportCost > 0 && (
+                <div className="grid grid-cols-[2rem_1fr_8rem] gap-0 py-5 border-b border-gray-100 items-start">
+                  <span className="text-xs text-gray-300 font-semibold pt-0.5">{String(bd.itemBreakdowns.length + 1).padStart(2, '0')}</span>
+                  <div className="pr-6">
+                    <p className="font-bold text-gray-900 text-sm">Transport &amp; Logistics</p>
+                    <p className="text-gray-400 text-xs mt-1">Delivery to site</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-bold text-gray-900 text-sm">{fmtINR(bd.transportCost)}</p>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
 
-          {/* Standard T&C */}
-          <div className="text-xs text-slate-400 space-y-1 border-t border-slate-100 pt-5">
-            <p className="font-semibold text-slate-500 mb-1.5">Terms &amp; Conditions</p>
-            <p>1. Prices are valid for {validStr ? `30 days (until ${validStr})` : '30 days from date of issue'}.</p>
-            <p>2. 100% advance payment required before dispatch of material.</p>
-            <p>3. Standard fabric dispatched within transit time from date of payment.</p>
-            <p>4. Printed fabric: 7-day lead time after crop image confirmation and full payment.</p>
-            <p>5. Local forwarding and packing charges at actuals, unless stated above.</p>
-            <p>6. Transportation payable at delivery unless included in this quotation.</p>
-            <p>7. All electrical work to comply with local codes; site supply by client.</p>
-          </div>
-
-          {/* Footer */}
-          <div className="mt-8 pt-6 border-t border-slate-100 flex items-end justify-between">
-            <div>
-              <p className="text-xs text-slate-500">Authorised Signatory</p>
-              <div className="mt-8 border-t border-slate-300 w-40" />
-              <p className="text-xs text-slate-400 mt-1">Sidharth Trading Co.</p>
+            {/* Totals block */}
+            <div className="ml-8 mb-8">
+              {bd.gstAmount > 0 && (
+                <div className="flex items-center justify-between py-2 border-b border-gray-100 text-sm">
+                  <span className="text-gray-500">Subtotal</span>
+                  <span className="font-semibold text-gray-700">{fmtINR(bd.subtotalBeforeGst)}</span>
+                </div>
+              )}
+              {bd.gstAmount > 0 && (
+                <div className="flex items-center justify-between py-2 border-b border-gray-100 text-sm">
+                  <span className="text-gray-500">GST 18%</span>
+                  <span className="font-semibold text-gray-700">{fmtINR(bd.gstAmount)}</span>
+                </div>
+              )}
+              <div className="bg-gray-900 rounded-xl px-5 py-4 mt-3 flex items-center justify-between">
+                <div>
+                  <p className="text-gray-400 text-[10px] font-semibold tracking-widest uppercase">Grand Total</p>
+                  <p className="text-gray-300 text-xs mt-0.5">
+                    {quote.includeGst ? 'Inclusive of GST 18%' : 'Exclusive of GST'}
+                  </p>
+                </div>
+                <p className="text-white font-black text-2xl tracking-tight">{fmtINR(bd.grandTotal)}</p>
+              </div>
+              {quote.displayMode === 'per-sqft' && bd.totalSqft > 0 && (
+                <p className="text-xs text-gray-400 text-right mt-2">
+                  {bd.totalSqft.toFixed(1)} sqft · {fmtINR(bd.pricePerSqft)}/sqft
+                </p>
+              )}
             </div>
-            <div className="text-right">
-              <p className="text-xs text-slate-400">For queries contact:</p>
-              <p className="text-xs font-medium text-slate-600">Sidharth Trading Co. | PONGS Stretch Ceiling</p>
-              <p className="text-xs text-slate-400">Bengaluru, Karnataka</p>
+
+            {/* What's included */}
+            <div className="mb-7 border border-gray-100 rounded-xl p-5">
+              <p className="text-[10px] font-bold text-gray-400 tracking-[0.2em] uppercase mb-3">Scope of Supply &amp; Work</p>
+              <p className="text-sm text-gray-600 leading-relaxed">
+                Premium PONGS / Descor stretch ceiling fabric
+                {hasGripper ? ', aluminium gripper profiles' : ''}
+                {hasLighting ? ', integrated LED cove lighting with drivers, controllers &amp; remotes' : ''}
+                {hasPrinting ? ', custom digital printing on fabric' : ''}
+                , and professional installation by certified technicians. All measurements, cutting, and fitting are included.
+              </p>
+            </div>
+
+            {/* Notes */}
+            {quote.notes && (
+              <div className="mb-7 bg-amber-50/60 border border-amber-100 rounded-xl p-5">
+                <p className="text-[10px] font-bold text-amber-600 tracking-[0.2em] uppercase mb-2">Special Notes</p>
+                <p className="text-sm text-gray-700 whitespace-pre-line leading-relaxed">{quote.notes}</p>
+              </div>
+            )}
+
+            {/* T&C */}
+            <div className="border-t border-gray-100 pt-6">
+              <p className="text-[10px] font-bold text-gray-400 tracking-[0.2em] uppercase mb-3">Terms &amp; Conditions</p>
+              <ol className="space-y-1.5 list-none">
+                {[
+                  `Prices valid for ${validStr ? `30 days (until ${validStr})` : '30 days from issue'}.`,
+                  '100% advance payment required before material dispatch.',
+                  'Standard fabric dispatched within transit time from payment confirmation.',
+                  'Printed fabric: 7-day lead time after crop image confirmation and full payment.',
+                  'Transportation payable at delivery unless included above.',
+                  'Site supply of electrical power by client; all electrical work to comply with local codes.',
+                ].map((t, i) => (
+                  <li key={i} className="flex items-start gap-2.5 text-xs text-gray-500">
+                    <span className="text-gray-300 font-semibold shrink-0 mt-px">{i + 1}.</span>
+                    <span>{t}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+
+            {/* Signature footer */}
+            <div className="mt-10 pt-7 border-t border-gray-100 flex items-end justify-between">
+              <div>
+                <div className="border-t border-gray-900 w-44 pt-2">
+                  <p className="text-[11px] font-semibold text-gray-700">Authorised Signatory</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Sidharth Trading Co.</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="font-black text-gray-900 text-sm tracking-tight">PONGS STRETCH CEILING</p>
+                <p className="text-xs text-gray-500 mt-0.5">Sidharth Trading Co. · Bengaluru</p>
+                <p className="text-xs text-gray-400 mt-0.5">info@pongsindia.com</p>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* ─── Page 2: Why PONGS + Lead time + T&C ─── */}
-        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-10 mt-6 print:shadow-none print:border-0 print:rounded-none print:p-8 print-break">
+        {/* ─── Page 2 ─── */}
+        <div className="bg-white rounded-2xl shadow-[0_2px_16px_0_rgb(0,0,0,0.08)] overflow-hidden mt-5 print:shadow-none print:rounded-none print-break">
 
-          {/* Page 2 header */}
-          <div className="flex items-start justify-between mb-8 pb-5 border-b border-slate-200">
-            <div>
-              <h2 className="text-2xl font-black text-slate-900 tracking-tight">PONGS</h2>
-              <p className="text-xs text-slate-400 tracking-widest">STRETCH CEILING SYSTEMS</p>
+          {/* Slim page 2 header */}
+          <div className="bg-gray-900 px-10 py-5 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-7 h-7 bg-white/10 rounded-lg flex items-center justify-center">
+                <span className="text-white font-black text-xs">P</span>
+              </div>
+              <div>
+                <p className="text-white font-black text-sm tracking-tight leading-none">PONGS</p>
+                <p className="text-gray-500 text-[9px] tracking-widest">STRETCH CEILING</p>
+              </div>
             </div>
-            <p className="text-xs text-slate-400">{quote.quoteNumber}</p>
+            <p className="text-gray-500 text-xs font-medium">{quote.quoteNumber}</p>
           </div>
 
-          {/* Why PONGS */}
-          <div className="mb-8">
-            <h3 className="text-lg font-bold text-slate-900 mb-4">Why PONGS Stretch Ceiling?</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {[
-                ['Seamless Finish', 'One continuous surface with no joints (up to 5m width), no paint, no plaster. Stays perfect for 15+ years.'],
-                ['Acoustic Performance', 'Optional acoustic fabrics (Descor Acoustic, Silencio, Soundscape) reduce noise by up to 25 dB.'],
-                ['LED Integration', 'Cove-integrated LED system with precise light diffusion — no hot spots, no visible strips.'],
-                ['Moisture & Mold Resistant', 'PVC and polyester fabrics resist humidity, mold, and condensation. Safe for bathrooms, pools, and humid climates.'],
-                ['Rapid Installation', 'No wet work, no curing time. A typical room is installed in hours — zero dust and zero disruption.'],
-                ['Design Flexibility', 'Available in 200+ colors, textures (matte, gloss, satin, metallic, translucent), and custom printing on fabric.'],
-              ].map(([title, desc]) => (
-                <div key={title} className="flex gap-3">
-                  <div className="w-1 bg-slate-800 rounded-full shrink-0 mt-1" style={{height: '100%', minHeight: 40}} />
-                  <div>
-                    <p className="font-semibold text-slate-900 text-sm">{title}</p>
-                    <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{desc}</p>
+          <div className="px-10 py-8">
+
+            {/* Why PONGS */}
+            <div className="mb-9">
+              <p className="text-[10px] font-bold text-gray-400 tracking-[0.2em] uppercase mb-5">Why PONGS Stretch Ceiling?</p>
+              <div className="grid grid-cols-2 gap-4">
+                {[
+                  ['Seamless Finish', 'One continuous surface — no joints up to 5m width, no painting, no plastering. Stays perfect 15+ years.'],
+                  ['Acoustic Performance', 'Optional acoustic fabrics reduce ambient noise by up to 25 dB. Ideal for offices, studios, and hospitality.'],
+                  ['LED Cove Integration', 'Precision light diffusion with no hot spots, no visible strips. Dramatic effect with flawless finish.'],
+                  ['Moisture & Mold Resistant', 'PVC and polyester fabrics resist humidity, condensation, and mold — safe for any climate.'],
+                  ['Rapid Installation', 'No wet work, no curing. A typical room installed in hours — zero dust, zero disruption.'],
+                  ['Design Flexibility', '200+ colours, textures (matte, gloss, satin, metallic, translucent), and custom printing on fabric.'],
+                ].map(([title, desc]) => (
+                  <div key={title} className="flex gap-3 p-4 rounded-xl border border-gray-100 bg-gray-50/50">
+                    <div className="w-0.5 bg-gray-900 rounded-full shrink-0 self-stretch opacity-20" />
+                    <div>
+                      <p className="font-bold text-gray-900 text-xs mb-1">{title}</p>
+                      <p className="text-[11px] text-gray-500 leading-relaxed">{desc}</p>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Lead times */}
-          <div className="mb-8 p-4 bg-slate-50 rounded-lg border border-slate-200">
-            <h3 className="font-bold text-slate-900 mb-2">Lead Times</h3>
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <p className="font-semibold text-slate-700">Standard Fabrics</p>
-                <p className="text-xs text-slate-500 mt-0.5">All standard colors in stock — ready for dispatch within transit time from payment confirmation.</p>
-              </div>
-              <div>
-                <p className="font-semibold text-slate-700">Printed / Custom Fabrics</p>
-                <p className="text-xs text-slate-500 mt-0.5">7-day lead time after crop image confirmation and full payment receipt.</p>
+                ))}
               </div>
             </div>
-          </div>
 
-          {/* Detailed T&C */}
-          <div>
-            <h3 className="font-bold text-slate-900 mb-3">Full Terms &amp; Conditions</h3>
-            <ol className="text-xs text-slate-500 space-y-1.5 list-decimal list-inside leading-relaxed">
-              <li>Quotation is valid for 30 days from date of issue unless stated otherwise.</li>
-              <li>Prices are subject to change without notice after validity period.</li>
-              <li>100% advance payment required before material is dispatched.</li>
-              <li>Cancellations after payment are subject to a 15% restocking / processing charge.</li>
-              <li>Supply, delivery, and professional installation are included in the quoted price.</li>
-              <li>Client to provide site access, electrical power, and a clear working area at no charge.</li>
-              <li>Any civil or electrical work required at site (conduit, power points, false ceiling modifications) is the responsibility of the client unless included above.</li>
-              <li>Fabric color may vary slightly from swatches due to monitor calibration and lighting conditions.</li>
-              <li>Warranty: 10-year manufacturer warranty on fabric; 1-year warranty on electrical components.</li>
-              <li>Disputes subject to jurisdiction of Bengaluru courts.</li>
-            </ol>
-          </div>
+            {/* Lead times */}
+            <div className="mb-9 grid grid-cols-2 gap-4">
+              <div className="border border-gray-100 rounded-xl p-5">
+                <p className="text-[10px] font-bold text-gray-400 tracking-[0.2em] uppercase mb-2">Standard Fabrics</p>
+                <p className="font-bold text-gray-900 text-sm mb-1">Ready to ship</p>
+                <p className="text-xs text-gray-500 leading-relaxed">All standard colours in stock — dispatched within transit time from payment confirmation.</p>
+              </div>
+              <div className="border border-gray-100 rounded-xl p-5">
+                <p className="text-[10px] font-bold text-gray-400 tracking-[0.2em] uppercase mb-2">Printed / Custom</p>
+                <p className="font-bold text-gray-900 text-sm mb-1">7-day lead time</p>
+                <p className="text-xs text-gray-500 leading-relaxed">After crop image confirmation and full payment receipt.</p>
+              </div>
+            </div>
 
-          {/* Page 2 footer */}
-          <div className="mt-10 pt-6 border-t border-slate-100 text-center">
-            <p className="text-xs font-black text-slate-800 tracking-widest">PONGS · STRETCH CEILING SYSTEMS</p>
-            <p className="text-xs text-slate-400 mt-1">Sidharth Trading Co. | Bengaluru, Karnataka</p>
+            {/* Full T&C */}
+            <div>
+              <p className="text-[10px] font-bold text-gray-400 tracking-[0.2em] uppercase mb-4">Full Terms &amp; Conditions</p>
+              <ol className="space-y-2">
+                {[
+                  'Quotation valid for 30 days from date of issue unless stated otherwise.',
+                  'Prices subject to change without notice after validity period.',
+                  '100% advance payment required before material is dispatched.',
+                  'Cancellations after payment subject to a 15% restocking/processing charge.',
+                  'Supply, delivery, and professional installation are included in the quoted price.',
+                  'Client to provide site access, electrical power, and clear working area at no charge.',
+                  'Civil or electrical work at site (conduit, power points, false ceiling modifications) is client\'s responsibility unless included above.',
+                  'Fabric colour may vary slightly from swatches due to monitor calibration and lighting conditions.',
+                  'Warranty: 10-year manufacturer warranty on fabric; 1-year on electrical components.',
+                  'Disputes subject to jurisdiction of Bengaluru courts.',
+                ].map((t, i) => (
+                  <li key={i} className="flex items-start gap-2.5 text-xs text-gray-500">
+                    <span className="text-gray-300 font-semibold shrink-0 w-4">{i + 1}.</span>
+                    <span className="leading-relaxed">{t}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+
+            {/* Page 2 footer */}
+            <div className="mt-10 pt-6 border-t border-gray-100 flex items-center justify-between">
+              <p className="text-[10px] font-black text-gray-400 tracking-[0.25em] uppercase">Pongs · Stretch Ceiling Systems</p>
+              <p className="text-[10px] text-gray-400">Sidharth Trading Co. · Bengaluru, Karnataka</p>
+            </div>
           </div>
         </div>
       </div>
