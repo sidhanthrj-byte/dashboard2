@@ -62,7 +62,6 @@ export default function HomePage() {
 
   return (
     <div>
-      {/* Header row */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Quotations</h1>
@@ -74,12 +73,11 @@ export default function HomePage() {
         </a>
       </div>
 
-      {/* Stats bar */}
       {!loading && quotes.length > 0 && !search && (
         <div className="grid grid-cols-2 gap-4 mb-6">
           <div className="card p-4 flex items-center gap-3">
-            <div className="w-9 h-9 bg-amber-50 rounded-xl flex items-center justify-center shrink-0">
-              <Hash size={18} className="text-amber-600" />
+            <div className="w-9 h-9 bg-slate-100 rounded-xl flex items-center justify-center shrink-0">
+              <Hash size={18} className="text-slate-600" />
             </div>
             <div>
               <p className="text-xs text-slate-500 font-medium">Total Quotes</p>
@@ -87,8 +85,8 @@ export default function HomePage() {
             </div>
           </div>
           <div className="card p-4 flex items-center gap-3">
-            <div className="w-9 h-9 bg-green-50 rounded-xl flex items-center justify-center shrink-0">
-              <TrendingUp size={18} className="text-green-600" />
+            <div className="w-9 h-9 bg-emerald-50 rounded-xl flex items-center justify-center shrink-0">
+              <TrendingUp size={18} className="text-emerald-600" />
             </div>
             <div>
               <p className="text-xs text-slate-500 font-medium">Pipeline Value</p>
@@ -98,7 +96,6 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Search */}
       <div className="relative mb-6">
         <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
         <input
@@ -109,7 +106,6 @@ export default function HomePage() {
         />
       </div>
 
-      {/* Quote list */}
       {loading ? (
         <div className="grid gap-3">
           {[1, 2, 3].map(i => (
@@ -162,24 +158,22 @@ function QuoteCard({ quote, deleting, duplicating, onDelete, onDuplicate }: {
   try { grandTotal = calculateQuote(quote).grandTotal } catch {}
 
   return (
-    <div className="card p-5 flex flex-col sm:flex-row sm:items-center gap-4 group hover:border-amber-200 hover:shadow-md transition-all">
-      {/* Left: quote number badge */}
+    <div className="card p-5 flex flex-col sm:flex-row sm:items-center gap-4 group hover:border-slate-300 hover:shadow-md transition-all">
       <div className="shrink-0">
-        <div className="w-12 h-12 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-center">
-          <FileText size={20} className="text-amber-600" />
+        <div className="w-12 h-12 bg-slate-100 border border-slate-200 rounded-xl flex items-center justify-center">
+          <FileText size={20} className="text-slate-600" />
         </div>
       </div>
 
-      {/* Middle: info */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap mb-1">
           <span className="font-bold text-slate-900">{quote.clientName}</span>
           <span className="badge bg-slate-100 text-slate-600">{quote.quoteNumber}</span>
-          <span className="badge bg-amber-50 text-amber-700 border border-amber-200">
+          <span className="badge bg-slate-50 text-slate-700 border border-slate-200">
             {TIER_LABEL[quote.priceTier]}
           </span>
           {grandTotal > 0 && (
-            <span className="badge bg-green-50 text-green-700 border border-green-200 font-bold">
+            <span className="badge bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold">
               {fmtINR(grandTotal)}
             </span>
           )}
@@ -192,7 +186,6 @@ function QuoteCard({ quote, deleting, duplicating, onDelete, onDuplicate }: {
         </div>
       </div>
 
-      {/* Actions */}
       <div className="flex items-center gap-2 shrink-0">
         <a href={`/quotes/${quote.id}/team`} className="btn-secondary text-xs gap-1.5">
           <Users size={14} /> Team

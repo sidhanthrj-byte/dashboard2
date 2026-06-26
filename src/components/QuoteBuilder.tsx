@@ -5,7 +5,7 @@ import { Plus, Save, Loader2, CheckCircle } from 'lucide-react'
 import { v4 as uuid } from 'uuid'
 import { useRouter } from 'next/navigation'
 import CeilingItemForm, { defaultItem } from './CeilingItemForm'
-import type { Quote, CeilingItem, PriceTier } from '@/lib/types'
+import type { Quote, CeilingItem, PriceTier, QuoteDisplayMode } from '@/lib/types'
 import { calculateQuote, fmtINR } from '@/lib/calculations'
 
 interface Props {
@@ -23,6 +23,8 @@ export default function QuoteBuilder({ initial, mode }: Props) {
 
   const [meta, setMeta] = useState({
     clientName: initial?.clientName ?? '',
+    clientEmail: initial?.clientEmail ?? '',
+    clientPhone: initial?.clientPhone ?? '',
     projectName: initial?.projectName ?? '',
     location: initial?.location ?? '',
     date: initial?.date ?? today,
@@ -30,6 +32,9 @@ export default function QuoteBuilder({ initial, mode }: Props) {
     priceTier: (initial?.priceTier ?? 'msp') as PriceTier,
     markupPercent: initial?.markupPercent ?? 0,
     installationRatePerSqft: initial?.installationRatePerSqft ?? 60,
+    transportCost: initial?.transportCost ?? 0,
+    includeGst: initial?.includeGst ?? false,
+    displayMode: (initial?.displayMode ?? 'total') as QuoteDisplayMode,
     notes: initial?.notes ?? '',
   })
 
@@ -37,22 +42,22 @@ export default function QuoteBuilder({ initial, mode }: Props) {
     initial?.items?.length ? initial.items : [defaultItem(uuid())]
   )
 
-  // Live preview calculation
-  const [preview, setPreview] = useState<{ total: number; items: number; installation: number } | null>(null)
+  const [preview, setPreview] = useState<ReturnType<typeof calculateQuote> | null>(null)
 
   const updatePreview = useCallback(() => {
-    const fakeQuote: Quote = {
-      id: '', quoteNumber: '', createdAt: '', updatedAt: '',
-      ...meta,
-      items,
+    try {
+      const fakeQuote: Quote = {
+        id: '', quoteNumber: '', createdAt: '', updatedAt: '',
+        ...meta,
+        items,
+      }
+      setPreview(calculateQuote(fakeQuote))
+    } catch {
+      setPreview(null)
     }
-    const bd = calculateQuote(fakeQuote)
-    setPreview({ total: bd.grandTotal, items: items.length, installation: bd.totalInstallation })
   }, [meta, items])
 
-  useEffect(() => {
-    updatePreview()
-  }, [updatePreview])
+  useEffect(() => { updatePreview() }, [updatePreview])
 
   function addItem() {
     setItems(prev => [...prev, defaultItem(uuid())])
@@ -67,31 +72,18 @@ export default function QuoteBuilder({ initial, mode }: Props) {
   }
 
   async function handleSave() {
-    if (!meta.clientName.trim()) {
-      alert('Please enter a client name.')
-      return
-    }
-    if (items.length === 0) {
-      alert('Please add at least one ceiling item.')
-      return
-    }
+    if (!meta.clientName.trim()) { alert('Please enter a client name.'); return }
+    if (items.length === 0) { alert('Please add at least one ceiling item.'); return }
 
     setSaving(true)
     const payload = { ...meta, items }
-
     const url = mode === 'edit' ? `/api/quotes/${initial!.id}` : '/api/quotes'
     const method = mode === 'edit' ? 'PUT' : 'POST'
-    const res = await fetch(url, {
-      method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-    const saved = await res.json()
+    const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+    const savedQ = await res.json()
     setSaving(false)
     setSaved(true)
-    setTimeout(() => {
-      router.push(`/quotes/${saved.id}/team`)
-    }, 800)
+    setTimeout(() => router.push(`/quotes/${savedQ.id}/team`), 800)
   }
 
   const TIER_OPTIONS: { value: PriceTier; label: string; desc: string }[] = [
@@ -105,10 +97,10 @@ export default function QuoteBuilder({ initial, mode }: Props) {
       {/* Main form */}
       <div className="lg:col-span-2 space-y-6">
 
-        {/* Project details card */}
+        {/* Project details */}
         <div className="card p-6">
           <h2 className="font-semibold text-slate-800 mb-5 flex items-center gap-2">
-            <span className="w-5 h-5 rounded-full bg-amber-100 text-amber-700 text-xs font-bold flex items-center justify-center">1</span>
+            <span className="w-5 h-5 rounded-full bg-slate-800 text-white text-xs font-bold flex items-center justify-center">1</span>
             Project Details
           </h2>
           <div className="grid grid-cols-2 gap-4">
@@ -121,6 +113,16 @@ export default function QuoteBuilder({ initial, mode }: Props) {
               <label className="label">Project Name</label>
               <input className="input" placeholder="Office Renovation"
                 value={meta.projectName} onChange={e => setMeta(m => ({ ...m, projectName: e.target.value }))} />
+            </div>
+            <div>
+              <label className="label">Client Email</label>
+              <input type="email" className="input" placeholder="client@example.com"
+                value={meta.clientEmail} onChange={e => setMeta(m => ({ ...m, clientEmail: e.target.value }))} />
+            </div>
+            <div>
+              <label className="label">Client Phone</label>
+              <input type="tel" className="input" placeholder="+91 98765 43210"
+                value={meta.clientPhone} onChange={e => setMeta(m => ({ ...m, clientPhone: e.target.value }))} />
             </div>
             <div>
               <label className="label">Location</label>
@@ -140,32 +142,31 @@ export default function QuoteBuilder({ initial, mode }: Props) {
           </div>
         </div>
 
-        {/* Pricing config */}
+        {/* Pricing */}
         <div className="card p-6">
           <h2 className="font-semibold text-slate-800 mb-5 flex items-center gap-2">
-            <span className="w-5 h-5 rounded-full bg-amber-100 text-amber-700 text-xs font-bold flex items-center justify-center">2</span>
+            <span className="w-5 h-5 rounded-full bg-slate-800 text-white text-xs font-bold flex items-center justify-center">2</span>
             Pricing
           </h2>
           <div className="grid grid-cols-3 gap-3 mb-4">
             {TIER_OPTIONS.map(t => (
               <button
-                key={t.value}
-                type="button"
+                key={t.value} type="button"
                 onClick={() => setMeta(m => ({ ...m, priceTier: t.value }))}
                 className={`p-3 rounded-xl border text-left transition-all ${
                   meta.priceTier === t.value
-                    ? 'border-amber-400 bg-amber-50'
+                    ? 'border-slate-700 bg-slate-800'
                     : 'border-slate-200 hover:border-slate-300'
                 }`}
               >
-                <div className={`font-semibold text-sm ${meta.priceTier === t.value ? 'text-amber-800' : 'text-slate-800'}`}>
+                <div className={`font-semibold text-sm ${meta.priceTier === t.value ? 'text-white' : 'text-slate-800'}`}>
                   {t.label}
                 </div>
-                <div className="text-xs text-slate-500 mt-0.5">{t.desc}</div>
+                <div className={`text-xs mt-0.5 ${meta.priceTier === t.value ? 'text-slate-300' : 'text-slate-500'}`}>{t.desc}</div>
               </button>
             ))}
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
               <label className="label">Additional Markup (%)</label>
               <input type="number" min="0" max="200" className="input"
@@ -177,7 +178,42 @@ export default function QuoteBuilder({ initial, mode }: Props) {
               <input type="number" min="0" className="input"
                 value={meta.installationRatePerSqft}
                 onChange={e => setMeta(m => ({ ...m, installationRatePerSqft: parseFloat(e.target.value) || 0 }))} />
-              <p className="text-xs text-slate-400 mt-1">Auto-calculated per item from actual ceiling area</p>
+            </div>
+            <div>
+              <label className="label">Transport Cost (₹ flat)</label>
+              <input type="number" min="0" className="input"
+                value={meta.transportCost}
+                onChange={e => setMeta(m => ({ ...m, transportCost: parseFloat(e.target.value) || 0 }))} />
+            </div>
+          </div>
+          <div className="flex items-center gap-6">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <div
+                onClick={() => setMeta(m => ({ ...m, includeGst: !m.includeGst }))}
+                className={`w-10 h-6 rounded-full transition-colors relative cursor-pointer ${
+                  meta.includeGst ? 'bg-slate-800' : 'bg-slate-200'
+                }`}
+              >
+                <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
+                  meta.includeGst ? 'translate-x-5' : 'translate-x-1'
+                }`} />
+              </div>
+              <span className="text-sm text-slate-700 font-medium">Include GST (18%)</span>
+            </label>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-slate-500">Display:</span>
+              {(['total', 'per-sqft'] as QuoteDisplayMode[]).map(m => (
+                <button key={m} type="button"
+                  onClick={() => setMeta(mm => ({ ...mm, displayMode: m }))}
+                  className={`px-3 py-1 rounded-lg border text-xs font-semibold transition-all ${
+                    meta.displayMode === m
+                      ? 'border-slate-700 bg-slate-800 text-white'
+                      : 'border-slate-200 text-slate-600 hover:border-slate-300'
+                  }`}
+                >
+                  {m === 'total' ? 'Total Price' : 'Per Sqft'}
+                </button>
+              ))}
             </div>
           </div>
         </div>
@@ -185,7 +221,7 @@ export default function QuoteBuilder({ initial, mode }: Props) {
         {/* Ceiling items */}
         <div>
           <h2 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
-            <span className="w-5 h-5 rounded-full bg-amber-100 text-amber-700 text-xs font-bold flex items-center justify-center">3</span>
+            <span className="w-5 h-5 rounded-full bg-slate-800 text-white text-xs font-bold flex items-center justify-center">3</span>
             Ceiling Items
           </h2>
           <div className="space-y-4">
@@ -194,6 +230,7 @@ export default function QuoteBuilder({ initial, mode }: Props) {
                 key={item.id}
                 item={item}
                 index={idx}
+                priceTier={meta.priceTier}
                 onChange={updated => updateItem(idx, updated)}
                 onRemove={() => removeItem(idx)}
               />
@@ -202,7 +239,7 @@ export default function QuoteBuilder({ initial, mode }: Props) {
           <button
             type="button"
             onClick={addItem}
-            className="mt-4 w-full py-3 border-2 border-dashed border-slate-200 rounded-xl text-slate-500 text-sm font-medium hover:border-amber-300 hover:text-amber-600 hover:bg-amber-50 transition-all flex items-center justify-center gap-2"
+            className="mt-4 w-full py-3 border-2 border-dashed border-slate-200 rounded-xl text-slate-500 text-sm font-medium hover:border-slate-400 hover:text-slate-700 hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
           >
             <Plus size={16} /> Add Ceiling Item
           </button>
@@ -212,46 +249,53 @@ export default function QuoteBuilder({ initial, mode }: Props) {
         <div className="card p-6">
           <label className="label">Quote Notes / Terms</label>
           <textarea className="input resize-none h-24"
-            placeholder="Any special notes, terms, or conditions for this quote…"
+            placeholder="Any special notes, terms, or conditions…"
             value={meta.notes}
             onChange={e => setMeta(m => ({ ...m, notes: e.target.value }))} />
         </div>
       </div>
 
-      {/* Sidebar: live summary */}
+      {/* Sidebar */}
       <div className="lg:col-span-1">
         <div className="sticky top-24 space-y-4">
-          {/* Summary card */}
           <div className="card p-5">
             <h3 className="font-semibold text-slate-800 mb-4">Quote Summary</h3>
             {preview ? (
               <>
                 <div className="space-y-2 mb-4">
-                  {items.map((item, idx) => {
-                    const fakeQ: Quote = { id: '', quoteNumber: '', createdAt: '', updatedAt: '', ...meta, installationRatePerSqft: meta.installationRatePerSqft, items: [item] }
-                    const bd = calculateQuote(fakeQ)
-                    return (
-                      <div key={item.id} className="flex justify-between items-center text-sm py-1.5 border-b border-slate-100 last:border-0">
-                        <span className="text-slate-600 truncate max-w-[60%]">
-                          {item.name || `Item ${idx + 1}`}
-                        </span>
-                        <span className="font-semibold text-slate-800">{fmtINR(bd.grandTotal)}</span>
-                      </div>
-                    )
-                  })}
+                  {preview.itemBreakdowns.map((bd, idx) => (
+                    <div key={bd.item.id} className="flex justify-between items-center text-sm py-1.5 border-b border-slate-100 last:border-0">
+                      <span className="text-slate-600 truncate max-w-[60%]">
+                        {bd.item.name || `Item ${idx + 1}`}
+                      </span>
+                      <span className="font-semibold text-slate-800">{fmtINR(bd.itemTotal)}</span>
+                    </div>
+                  ))}
                 </div>
-                {preview.installation > 0 && (
-                  <div className="flex justify-between text-sm py-1.5 text-slate-500 border-t border-slate-100 mt-1 pt-2">
-                    <span>Installation (₹{meta.installationRatePerSqft}/sqft)</span>
-                    <span>{fmtINR(preview.installation)}</span>
+                {meta.transportCost > 0 && (
+                  <div className="flex justify-between text-sm py-1 text-slate-500">
+                    <span>Transport</span>
+                    <span>{fmtINR(meta.transportCost)}</span>
+                  </div>
+                )}
+                {preview.gstAmount > 0 && (
+                  <div className="flex justify-between text-sm py-1 text-slate-500">
+                    <span>GST 18%</span>
+                    <span>{fmtINR(preview.gstAmount)}</span>
                   </div>
                 )}
                 <div className="flex justify-between items-center pt-3 border-t border-slate-200 mt-2">
                   <span className="font-bold text-slate-900">Total</span>
-                  <span className="text-xl font-bold text-amber-600">{fmtINR(preview.total)}</span>
+                  <span className="text-xl font-bold text-slate-900">{fmtINR(preview.grandTotal)}</span>
                 </div>
+                {meta.displayMode === 'per-sqft' && preview.totalSqft > 0 && (
+                  <p className="text-xs text-slate-500 mt-1 text-right">
+                    {preview.totalSqft.toFixed(1)} sqft · ₹{Math.round(preview.pricePerSqft)}/sqft
+                  </p>
+                )}
                 <p className="text-xs text-slate-400 mt-2">
-                  {meta.markupPercent > 0 ? `+${meta.markupPercent}% markup · ` : ''}Excl. GST
+                  {meta.markupPercent > 0 ? `+${meta.markupPercent}% markup · ` : ''}
+                  {meta.includeGst ? 'Incl. GST 18%' : 'Excl. GST'}
                 </p>
               </>
             ) : (
@@ -259,12 +303,11 @@ export default function QuoteBuilder({ initial, mode }: Props) {
             )}
           </div>
 
-          {/* Save button */}
           <button
             onClick={handleSave}
             disabled={saving || saved}
             className={`w-full btn text-sm py-3 font-semibold justify-center ${
-              saved ? 'bg-green-500 text-white' : 'btn-primary'
+              saved ? 'bg-emerald-500 text-white' : 'btn-primary'
             }`}
           >
             {saving ? (
@@ -282,14 +325,13 @@ export default function QuoteBuilder({ initial, mode }: Props) {
             </a>
           )}
 
-          {/* Quick tips */}
-          <div className="card p-4 bg-blue-50 border-blue-100">
-            <p className="text-xs font-semibold text-blue-800 mb-2">Smart Calculations</p>
-            <ul className="text-xs text-blue-700 space-y-1">
-              <li>• Fabric roll optimised to minimise wastage</li>
-              <li>• LED strips = 1 per 6 inches of cove depth</li>
+          <div className="card p-4 bg-slate-50 border-slate-200">
+            <p className="text-xs font-semibold text-slate-700 mb-2">Smart Calculations</p>
+            <ul className="text-xs text-slate-500 space-y-1">
+              <li>• Roll orientation chosen for minimum wastage</li>
+              <li>• Joint detection when both dims &gt; 5000mm</li>
+              <li>• LED strips: 1 per 6\" of cove depth</li>
               <li>• Drivers auto-selected with 20% headroom</li>
-              <li>• Tunable: DT8 + DA4m · Dimmable: DALI 2</li>
               <li>• Circle quoted as diameter × diameter square</li>
             </ul>
           </div>
