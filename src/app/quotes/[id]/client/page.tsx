@@ -161,16 +161,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
                   )
                 })}
 
-                {bd.totalInstallation > 0 && (
-                  <tr className="border-b border-slate-100">
-                    <td className="py-4 text-slate-400 text-xs">{bd.itemBreakdowns.length + 1}</td>
-                    <td className="py-4">
-                      <p className="font-semibold text-slate-900">Professional Installation</p>
-                      <p className="text-slate-500 text-xs mt-0.5">Supply &amp; fit including all fixings</p>
-                    </td>
-                    <td className="py-4 text-right font-semibold text-slate-900">{fmtINR(bd.totalInstallation)}</td>
-                  </tr>
-                )}
+                {/* Installation is bundled into item prices — not shown separately */}
 
                 {bd.transportCost > 0 && (
                   <tr className="border-b border-slate-100">
@@ -325,7 +316,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
               <li>Prices are subject to change without notice after validity period.</li>
               <li>100% advance payment required before material is dispatched.</li>
               <li>Cancellations after payment are subject to a 15% restocking / processing charge.</li>
-              <li>Installation is included only where explicitly stated in this quotation.</li>
+              <li>Supply, delivery, and professional installation are included in the quoted price.</li>
               <li>Client to provide site access, electrical power, and a clear working area at no charge.</li>
               <li>Any civil or electrical work required at site (conduit, power points, false ceiling modifications) is the responsibility of the client unless included above.</li>
               <li>Fabric color may vary slightly from swatches due to monitor calibration and lighting conditions.</li>
