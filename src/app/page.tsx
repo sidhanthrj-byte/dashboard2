@@ -1,9 +1,9 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { Search, FileText, Plus, Trash2, Eye, Users, Calendar, MapPin } from 'lucide-react'
+import { Search, FileText, Plus, Trash2, Eye, Users, Calendar, MapPin, Copy, TrendingUp, Hash } from 'lucide-react'
 import type { Quote } from '@/lib/types'
-import { fmtINR } from '@/lib/calculations'
+import { fmtINR, calculateQuote } from '@/lib/calculations'
 
 const TIER_LABEL: Record<string, string> = {
   dealer: 'Dealer', msp: 'MSP', specifiors: 'Specifiors',
@@ -14,6 +14,7 @@ export default function HomePage() {
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [duplicating, setDuplicating] = useState<string | null>(null)
 
   const fetchQuotes = useCallback(async (q = '') => {
     setLoading(true)
@@ -29,12 +30,34 @@ export default function HomePage() {
     return () => clearTimeout(t)
   }, [search, fetchQuotes])
 
+  const totalValue = quotes.reduce((sum, q) => {
+    try { return sum + calculateQuote(q).grandTotal } catch { return sum }
+  }, 0)
+
   async function deleteQuote(id: string, name: string) {
     if (!confirm(`Delete quote for "${name}"? This cannot be undone.`)) return
     setDeleting(id)
     await fetch(`/api/quotes/${id}`, { method: 'DELETE' })
     setQuotes(prev => prev.filter(q => q.id !== id))
     setDeleting(null)
+  }
+
+  async function duplicateQuote(quote: Quote) {
+    setDuplicating(quote.id)
+    const payload = {
+      ...quote,
+      clientName: quote.clientName + ' (Copy)',
+      date: new Date().toISOString().split('T')[0],
+      validUntil: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+    }
+    const res = await fetch('/api/quotes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    const created = await res.json()
+    setDuplicating(null)
+    window.location.href = `/quotes/${created.id}/edit`
   }
 
   return (
@@ -50,6 +73,30 @@ export default function HomePage() {
           New Quote
         </a>
       </div>
+
+      {/* Stats bar */}
+      {!loading && quotes.length > 0 && !search && (
+        <div className="grid grid-cols-2 gap-4 mb-6">
+          <div className="card p-4 flex items-center gap-3">
+            <div className="w-9 h-9 bg-amber-50 rounded-xl flex items-center justify-center shrink-0">
+              <Hash size={18} className="text-amber-600" />
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 font-medium">Total Quotes</p>
+              <p className="text-xl font-bold text-slate-900">{quotes.length}</p>
+            </div>
+          </div>
+          <div className="card p-4 flex items-center gap-3">
+            <div className="w-9 h-9 bg-green-50 rounded-xl flex items-center justify-center shrink-0">
+              <TrendingUp size={18} className="text-green-600" />
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 font-medium">Pipeline Value</p>
+              <p className="text-xl font-bold text-slate-900">{fmtINR(totalValue)}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Search */}
       <div className="relative mb-6">
@@ -91,7 +138,9 @@ export default function HomePage() {
               key={quote.id}
               quote={quote}
               deleting={deleting === quote.id}
+              duplicating={duplicating === quote.id}
               onDelete={() => deleteQuote(quote.id, quote.clientName)}
+              onDuplicate={() => duplicateQuote(quote)}
             />
           ))}
         </div>
@@ -100,13 +149,17 @@ export default function HomePage() {
   )
 }
 
-function QuoteCard({ quote, deleting, onDelete }: {
+function QuoteCard({ quote, deleting, duplicating, onDelete, onDuplicate }: {
   quote: Quote
   deleting: boolean
+  duplicating: boolean
   onDelete: () => void
+  onDuplicate: () => void
 }) {
   const date = new Date(quote.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
   const itemCount = quote.items.length
+  let grandTotal = 0
+  try { grandTotal = calculateQuote(quote).grandTotal } catch {}
 
   return (
     <div className="card p-5 flex flex-col sm:flex-row sm:items-center gap-4 group hover:border-amber-200 hover:shadow-md transition-all">
@@ -125,6 +178,11 @@ function QuoteCard({ quote, deleting, onDelete }: {
           <span className="badge bg-amber-50 text-amber-700 border border-amber-200">
             {TIER_LABEL[quote.priceTier]}
           </span>
+          {grandTotal > 0 && (
+            <span className="badge bg-green-50 text-green-700 border border-green-200 font-bold">
+              {fmtINR(grandTotal)}
+            </span>
+          )}
         </div>
         <p className="text-sm text-slate-600 font-medium truncate">{quote.projectName}</p>
         <div className="flex items-center gap-4 mt-1.5 text-xs text-slate-400">
@@ -145,6 +203,14 @@ function QuoteCard({ quote, deleting, onDelete }: {
         <a href={`/quotes/${quote.id}/edit`} className="btn-ghost text-xs px-2 py-1.5">
           Edit
         </a>
+        <button
+          onClick={onDuplicate}
+          disabled={duplicating}
+          className="btn-ghost text-xs px-2 py-1.5"
+          title="Duplicate quote"
+        >
+          <Copy size={14} />
+        </button>
         <button
           onClick={onDelete}
           disabled={deleting}

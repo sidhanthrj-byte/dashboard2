@@ -1,7 +1,7 @@
 import { getQuote } from '@/lib/store'
 import { notFound } from 'next/navigation'
 import { calculateQuote, fmtINR, formatDims } from '@/lib/calculations'
-import { Printer, Edit, Users } from 'lucide-react'
+import { Printer, Edit, Users, MessageCircle } from 'lucide-react'
 
 export default function ClientPage({ params }: { params: { id: string } }) {
   const quote = getQuote(params.id)
@@ -17,6 +17,17 @@ export default function ClientPage({ params }: { params: { id: string } }) {
         day: 'numeric', month: 'long', year: 'numeric',
       })
     : null
+
+  const waMessage = encodeURIComponent(
+    `*PONGS Stretch Ceiling – Quotation*\n\n` +
+    `*Quote:* ${quote.quoteNumber}\n` +
+    `*Client:* ${quote.clientName}\n` +
+    `*Project:* ${quote.projectName || '—'}\n` +
+    `*Date:* ${dateStr}\n\n` +
+    `*Grand Total: ${fmtINR(bd.grandTotal)}* (Excl. GST)\n\n` +
+    `_Sidharth Trading Co._`
+  )
+  const waUrl = `https://wa.me/?text=${waMessage}`
 
   return (
     <div>
@@ -35,6 +46,9 @@ export default function ClientPage({ params }: { params: { id: string } }) {
           </a>
           <a href={`/quotes/${quote.id}/edit`} className="btn-secondary text-xs gap-1.5">
             <Edit size={14} /> Edit
+          </a>
+          <a href={waUrl} target="_blank" rel="noopener noreferrer" className="btn-secondary text-xs gap-1.5 text-green-700 border-green-200 hover:bg-green-50">
+            <MessageCircle size={14} /> WhatsApp
           </a>
           <button onClick={() => window.print()} className="btn-primary text-xs gap-1.5">
             <Printer size={14} /> Print / PDF
