@@ -11,7 +11,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className="min-h-screen flex flex-col">
         <header className="bg-white/95 backdrop-blur-sm border-b border-gray-200/80 sticky top-0 z-50">
-          <div className="max-w-7xl mx-auto px-6 h-15 flex items-center justify-between" style={{height: 60}}>
+          <div className="max-w-7xl mx-auto px-3 sm:px-6 h-15 flex items-center justify-between" style={{height: 60}}>
             <a href="/" className="flex items-center gap-3 group">
               <div className="relative">
                 <div className="w-8 h-8 bg-gray-900 rounded-lg flex items-center justify-center shadow-sm group-hover:bg-gray-700 transition-colors">
@@ -36,7 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </div>
         </header>
 
-        <main className="flex-1 max-w-7xl mx-auto w-full px-6 py-8">
+        <main className="flex-1 max-w-7xl mx-auto w-full px-3 sm:px-6 py-4 sm:py-8">
           {children}
         </main>
 

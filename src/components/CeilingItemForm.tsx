@@ -136,7 +136,7 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
       {open && (
         <div className="px-5 py-5 space-y-5">
           {/* Row 1: Name + Surface + Quantity */}
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div className="col-span-2">
               <label className="label">Item Name / Location</label>
               <input
@@ -542,19 +542,20 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
                 const autoItems = autoPreview?.lineItems.filter(l => l.unit === 'nos') ?? []
                 return (
                   <div className="mt-2 pt-2 border-t border-indigo-200">
-                    <p className="font-semibold text-indigo-900 mb-1.5">Drivers &amp; Controls <span className="font-normal text-indigo-600">(edit qty to reduce)</span></p>
+                    <p className="font-semibold text-indigo-900 mb-1.5">Drivers &amp; Controls <span className="font-normal text-indigo-600">(edit qty freely)</span></p>
                     <div className="space-y-1.5">
                       {autoItems.map((auto, i) => {
                         const overrideVal = (item.driverOverrides ?? {})[auto.description]
                         const displayQty = overrideVal !== undefined ? overrideVal : auto.qty
-                        const isOverridden = overrideVal !== undefined && overrideVal < auto.qty
+                        const isOverridden = overrideVal !== undefined && overrideVal !== auto.qty
                         return (
                           <div key={i} className="flex items-center gap-2">
                             <input
                               type="number"
                               min={0}
-                              value={displayQty}
-                              onChange={e => {
+                              key={`${auto.description}-${auto.qty}`}
+                              defaultValue={displayQty}
+                              onBlur={e => {
                                 const v = parseInt(e.target.value)
                                 if (isNaN(v) || v < 0) return
                                 const newOv = { ...(item.driverOverrides ?? {}) }

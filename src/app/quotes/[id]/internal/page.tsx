@@ -20,15 +20,15 @@ export default async function InternalPage({ params }: { params: { id: string } 
   return (
     <div className="max-w-4xl mx-auto px-4 py-6">
       {/* Nav */}
-      <div className="no-print flex items-center justify-between mb-6">
-        <div className="flex items-center gap-2 text-sm text-slate-400">
+      <div className="no-print flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+        <div className="flex items-center gap-2 text-sm text-slate-400 flex-wrap">
           <a href="/" className="hover:text-slate-600">Quotes</a>
           <span>/</span>
           <span className="text-slate-600">{quote.quoteNumber}</span>
           <span>/</span>
           <span className="font-medium text-slate-800">Internal Cost Review</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <a href={`/quotes/${quote.id}/team`} className="btn-secondary text-xs gap-1.5">
             <Users size={14} /> Team View
           </a>
@@ -110,7 +110,8 @@ export default async function InternalPage({ params }: { params: { id: string } 
             )}
 
             {/* Line items table */}
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[500px]">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-xs text-slate-500 uppercase tracking-wider">
                   <th className="text-left px-5 py-2.5 font-semibold w-8">#</th>
@@ -153,6 +154,7 @@ export default async function InternalPage({ params }: { params: { id: string } 
                 </tr>
               </tfoot>
             </table>
+            </div>
           </div>
         )
       })}

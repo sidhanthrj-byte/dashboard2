@@ -18,6 +18,7 @@ export default function QuoteBuilder({ initial, mode }: Props) {
   const router = useRouter()
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [savingInternal, setSavingInternal] = useState(false)
 
   const today = new Date().toISOString().split('T')[0]
   const validUntil = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0]
@@ -122,15 +123,24 @@ export default function QuoteBuilder({ initial, mode }: Props) {
     if (!meta.clientName.trim()) { alert('Please enter a client name.'); return }
     if (items.length === 0) { alert('Please add at least one ceiling item.'); return }
 
-    setSaving(true)
+    const isInternal = redirectTo === 'internal'
+    if (isInternal) setSavingInternal(true)
+    else setSaving(true)
+
     const payload = { ...meta, items, manualRates: meta.priceTier === 'manual' ? manualRates : undefined }
     const url = mode === 'edit' ? `/api/quotes/${initial!.id}` : '/api/quotes'
     const method = mode === 'edit' ? 'PUT' : 'POST'
     const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
     const savedQ = await res.json()
-    setSaving(false)
-    setSaved(true)
-    setTimeout(() => router.push(`/quotes/${savedQ.id}/${redirectTo}`), 800)
+
+    if (isInternal) {
+      setSavingInternal(false)
+      router.push(`/quotes/${savedQ.id}/internal`)
+    } else {
+      setSaving(false)
+      setSaved(true)
+      setTimeout(() => router.push(`/quotes/${savedQ.id}/team`), 800)
+    }
   }
 
   function handleSave() { return saveQuote('team') }
@@ -235,7 +245,7 @@ export default function QuoteBuilder({ initial, mode }: Props) {
             <span className="w-5 h-5 rounded-full bg-slate-800 text-white text-xs font-bold flex items-center justify-center">2</span>
             Pricing
           </h2>
-          <div className="grid grid-cols-4 gap-3 mb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
             {TIER_OPTIONS.map(t => (
               <button
                 key={t.value} type="button"
@@ -256,7 +266,7 @@ export default function QuoteBuilder({ initial, mode }: Props) {
           {meta.priceTier === 'manual' && (
             <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl mb-4 space-y-3">
               <p className="text-xs font-semibold text-amber-900">Manual Rates — set your own price per unit</p>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="label text-amber-800">Fabric (₹/sqm)</label>
                   <input
@@ -461,10 +471,14 @@ export default function QuoteBuilder({ initial, mode }: Props) {
 
           <button
             onClick={() => saveQuote('internal')}
-            disabled={saving || saved}
+            disabled={savingInternal || saving}
             className="w-full btn btn-secondary text-sm py-2.5 font-semibold justify-center"
           >
-            Save &amp; Open Internal Cost Review
+            {savingInternal ? (
+              <><Loader2 size={16} className="animate-spin" /> Saving…</>
+            ) : (
+              <>Save &amp; Open Internal Cost Review</>
+            )}
           </button>
 
           {mode === 'edit' && (

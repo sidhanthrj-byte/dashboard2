@@ -87,8 +87,8 @@ export default async function ClientPage({ params }: { params: { id: string } })
   return (
     <div>
       {/* ── Action bar (screen only) ── */}
-      <div className="no-print flex items-center justify-between mb-6">
-        <div className="flex items-center gap-2 text-xs text-gray-400">
+      <div className="no-print flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+        <div className="flex items-center gap-2 text-xs text-gray-400 flex-wrap">
           <a href="/" className="hover:text-gray-700 transition-colors">Quotes</a>
           <span className="text-gray-300">/</span>
           <span className="text-gray-600 font-medium">{quote.quoteNumber}</span>

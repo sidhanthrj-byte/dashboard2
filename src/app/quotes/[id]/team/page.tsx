@@ -23,22 +23,21 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
   return (
     <div>
       {/* Nav */}
-      <div className="no-print flex items-center justify-between mb-6">
-        <div className="flex items-center gap-2 text-sm text-slate-400">
+      <div className="no-print flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+        <div className="flex items-center gap-2 text-sm text-slate-400 flex-wrap">
           <a href="/" className="hover:text-slate-600">Quotes</a>
           <span>/</span>
           <span className="text-slate-600">{quote.quoteNumber}</span>
           <span>/</span>
           <span className="font-medium text-slate-800">Team View</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <a href={`/quotes/${quote.id}/client`} className="btn-secondary text-xs gap-1.5">
             <Eye size={14} /> Client View
           </a>
           <a href={`/quotes/${quote.id}/edit`} className="btn-secondary text-xs gap-1.5">
             <Edit size={14} /> Edit
           </a>
-
           <PrintButton />
         </div>
       </div>
