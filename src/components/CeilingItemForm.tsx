@@ -471,13 +471,12 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
               {(() => {
                 const panels = preview.fabricDetail.panels
                 const hasJoint = preview.fabricDetail.hasJoint && panels.length > 1
-                const ru = (m: number) => Math.ceil(m * 2) / 2
                 const gripperQty = hasJoint
-                  ? round2(panels.reduce((s, p) => s + 2 * (ru(p.physicalWidth) + ru(p.cutLength)), 0))
-                  : round2(2 * (ru(preview.dim1M) + ru(preview.dim2M)))
+                  ? round2(panels.reduce((s, p) => s + 2 * (p.physicalWidth + p.cutLength), 0))
+                  : Math.ceil(preview.perimeterM * 10) / 10
                 const jointNote = hasJoint
-                  ? ` (${panels.map((p, i) => `P${i+1}: 2×(${ru(p.physicalWidth)}+${ru(p.cutLength)})m`).join(', ')})`
-                  : ` (${ru(preview.dim1M)}+${ru(preview.dim2M)}m rounded)`
+                  ? ` (${panels.map((p, i) => `P${i+1}: 2×(${p.physicalWidth.toFixed(2)}+${p.cutLength.toFixed(2)})m`).join(', ')})`
+                  : ''
                 return (
                   <p>• Gripper: {gripperQty.toFixed(2)} rmt {item.gripperType}{jointNote}</p>
                 )
