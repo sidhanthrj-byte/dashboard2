@@ -403,13 +403,15 @@ export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: 
 
   // Gripper
   let gripQty = Math.ceil(perimeterM * 10) / 10
-  // Add gripper for joint line if jointed
-  if (fabricDetail.hasJoint) {
-    gripQty = round2(gripQty + widthM)
+  // Add gripper for joint line if jointed.
+  // The joint line length = the cut length of each panel (the dimension perpendicular to the split).
+  if (fabricDetail.hasJoint && fabricDetail.panels.length > 0) {
+    const jointLineM = fabricDetail.panels[0].cutLength
+    gripQty = round2(gripQty + jointLineM)
   }
   const gripPrice = GRIPPER[item.gripperType] ?? GRIPPER['CW']
   lineItems.push({
-    description: `${item.gripperType} Gripper${fabricDetail.hasJoint ? ' (incl. joint line)' : ''}`,
+    description: `${item.gripperType} Gripper${fabricDetail.hasJoint ? ` (incl. ${round2(fabricDetail.panels[0]?.cutLength ?? 0)}m joint line)` : ''}`,
     qty: round2(gripQty), unit: 'rmt',
     dealerRate: gripPrice.dealer, tierRate: p(gripPrice, tier),
     dealerAmount: round2(gripQty * gripPrice.dealer),

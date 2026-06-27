@@ -430,12 +430,23 @@ export default function CeilingItemForm({ item, index, priceTier, onChange, onRe
             <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-lg text-xs text-indigo-800 space-y-1">
               <p className="font-semibold text-indigo-900 mb-2">Smart Calc Preview</p>
               {preview.fabricDetail.panels.map((panel, i) => (
-                <p key={i}>• Roll: {panel.orientation} | Waste: {panel.wastageArea.toFixed(2)} sqm ({panel.wastagePercent.toFixed(1)}%)</p>
+                <p key={i}>• {preview.fabricDetail.panels.length > 1 ? `Panel ${i+1}: ` : ''}Roll: {panel.orientation} | Waste: {panel.wastageArea.toFixed(2)} sqm ({panel.wastagePercent.toFixed(1)}%)</p>
               ))}
+              {preview.fabricDetail.panels.length > 1 && (
+                <p>• Total billed fabric: {preview.fabricDetail.totalBilledArea.toFixed(2)} sqm (used {preview.fabricDetail.totalUsedArea.toFixed(2)} sqm, waste {preview.fabricDetail.totalWastageArea.toFixed(2)} sqm)</p>
+              )}
               {preview.ledDetail && (
                 <p>• LED: {preview.ledDetail.stripCount} strip{preview.ledDetail.stripCount > 1 ? 's' : ''} × {preview.ledDetail.runningLengthM.toFixed(2)}m = {preview.ledDetail.totalRunningMeters} mtr running | {preview.ledDetail.totalWatts}W total</p>
               )}
-              <p>• Gripper: {round2(preview.perimeterM).toFixed(2)} rmt {item.gripperType}</p>
+              {(() => {
+                const gripperQty = preview.fabricDetail.hasJoint && preview.fabricDetail.panels.length > 0
+                  ? round2(round2(preview.perimeterM * 10) / 10 + preview.fabricDetail.panels[0].cutLength)
+                  : Math.ceil(preview.perimeterM * 10) / 10
+                const jointLine = preview.fabricDetail.hasJoint ? preview.fabricDetail.panels[0]?.cutLength : null
+                return (
+                  <p>• Gripper: {gripperQty.toFixed(2)} rmt {item.gripperType}{jointLine ? ` (perimeter ${round2(preview.perimeterM).toFixed(2)} + ${jointLine.toFixed(2)}m joint line)` : ''}</p>
+                )
+              })()}
               <p className="font-semibold pt-1">Item subtotal: {fmtINR(preview.subtotalFinal)} + {fmtINR(preview.installationCost)} install</p>
             </div>
           )}
