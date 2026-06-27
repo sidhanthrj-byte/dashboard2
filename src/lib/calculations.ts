@@ -32,88 +32,108 @@ function readTwoDims(dims: unknown): { dim1: number; dim2: number } {
   return { dim1: 0, dim2: 0 }
 }
 
-function bestRollForWidth(widthM: number): number {
+// Returns null when no available roll can fit this width (> 5m max)
+function bestRollForWidth(widthM: number): number | null {
   const widthMM = widthM * 1000
-  const rolls = ROLL_WIDTHS // metres: [2,3,4,5]
-  const rollMM = rolls.map(r => r * 1000)
-  const fit = rollMM.find(r => r >= widthMM)
-  return fit ? fit / 1000 : 5 // default to 5m if too wide
+  const fit = ROLL_WIDTHS.find(r => r * 1000 >= widthMM)
+  return fit ?? null
 }
 
 function makePanel(
-  widthM: number,
-  lengthM: number,
+  rollAxisM: number,  // the dimension used as roll width (must fit in a roll)
+  cutLengthM: number,
   isJoint: boolean,
 ): FabricPanel {
-  const roll = bestRollForWidth(widthM)
-  const panelArea = round2(roll * lengthM)
-  const usedArea = round2(widthM * lengthM)
+  const roll = bestRollForWidth(rollAxisM) ?? 5 // 5m fallback for edge cases
+  const panelArea = round2(roll * cutLengthM)
+  const usedArea = round2(rollAxisM * cutLengthM)
   const wastageArea = round2(panelArea - usedArea)
   const wastagePercent = panelArea > 0 ? round2((wastageArea / panelArea) * 100) : 0
   return {
     rollWidth: roll,
-    cutLength: round2(lengthM),
+    cutLength: round2(cutLengthM),
     panelArea,
     usedArea,
     wastageArea,
     wastagePercent,
-    orientation: `${roll}m roll × ${lengthM.toFixed(2)}m cut`,
+    orientation: `${roll}m roll × ${cutLengthM.toFixed(2)}m cut`,
     isJoint,
   }
 }
 
+// Determine the no-joint orientation: which dim is the roll axis, which is the cut length
+function orientNoJoint(d1M: number, d2M: number): { rollWidthM: number; cutLengthM: number; needsJoint: boolean } {
+  const roll1 = bestRollForWidth(d1M)
+  const roll2 = bestRollForWidth(d2M)
+
+  if (roll1 !== null && roll2 !== null) {
+    // Both fit — pick by min wastage
+    const waste1 = (roll1 - d1M) * d2M
+    const waste2 = (roll2 - d2M) * d1M
+    return waste1 <= waste2
+      ? { rollWidthM: d1M, cutLengthM: d2M, needsJoint: false }
+      : { rollWidthM: d2M, cutLengthM: d1M, needsJoint: false }
+  }
+  if (roll1 !== null) return { rollWidthM: d1M, cutLengthM: d2M, needsJoint: false }
+  if (roll2 !== null) return { rollWidthM: d2M, cutLengthM: d1M, needsJoint: false }
+  // Neither fits — both > 5m, joint is required
+  return { rollWidthM: Math.min(d1M, d2M), cutLengthM: Math.max(d1M, d2M), needsJoint: true }
+}
+
+// For center joint: find the best split — try splitting each dimension, pick less wastage
+// Splitting a dim means each half becomes the roll axis, the other dim becomes cut length
+function bestCenterJointPanels(d1M: number, d2M: number): { panels: FabricPanel[]; desc: string } {
+  const larger = Math.max(d1M, d2M)
+  const smaller = Math.min(d1M, d2M)
+
+  // Option A: split the larger dimension — each half is roll axis, smaller is cut length
+  const halfLarge = larger / 2
+  const rollA = bestRollForWidth(halfLarge) ?? 5
+  const wasteA = (rollA - halfLarge) * smaller * 2
+
+  // Option B: split the smaller dimension — each half is roll axis, larger is cut length
+  const halfSmall = smaller / 2
+  const rollB = bestRollForWidth(halfSmall) ?? 5
+  const wasteB = (rollB - halfSmall) * larger * 2
+
+  if (wasteA <= wasteB) {
+    return {
+      panels: [makePanel(halfLarge, smaller, true), makePanel(halfLarge, smaller, true)],
+      desc: `Center joint at ${(halfLarge * 1000).toFixed(0)}mm from each end (${(larger * 1000).toFixed(0)}mm dimension split)`,
+    }
+  }
+  return {
+    panels: [makePanel(halfSmall, larger, true), makePanel(halfSmall, larger, true)],
+    desc: `Center joint at ${(halfSmall * 1000).toFixed(0)}mm from each end (${(smaller * 1000).toFixed(0)}mm dimension split)`,
+  }
+}
+
 function computeFabricDetail(
-  widthM: number,
-  lengthM: number,
+  d1M: number,  // raw input dimension 1 (not pre-oriented)
+  d2M: number,  // raw input dimension 2 (not pre-oriented)
   item: CeilingItem,
 ): FabricDetail {
-  const widthMM = widthM * 1000
-  const lengthMM = lengthM * 1000
-  const hasJoint = widthMM > 5000 || lengthMM > 5000
-    ? item.jointType !== 'none'
-    : false
-  const bothOver5k = widthMM > 5000 && lengthMM > 5000
+  const larger = Math.max(d1M, d2M)
+  const smaller = Math.min(d1M, d2M)
 
   let panels: FabricPanel[] = []
   let jointPositionDesc = ''
 
-  if (!bothOver5k || item.jointType === 'none') {
-    // Single panel — optimise orientation
-    const dim1MM = widthM * 1000
-    const dim2MM = lengthM * 1000
-    // Try widthM as roll axis
-    const roll1 = bestRollForWidth(widthM)
-    const waste1 = (roll1 - widthM) * lengthM
-    // Try lengthM as roll axis
-    const roll2 = bestRollForWidth(lengthM)
-    const waste2 = (roll2 - lengthM) * widthM
-
-    let chosenWidth: number, chosenLength: number
-    if (waste1 <= waste2) {
-      chosenWidth = widthM; chosenLength = lengthM
-    } else {
-      chosenWidth = lengthM; chosenLength = widthM
-    }
-    panels = [makePanel(chosenWidth, chosenLength, false)]
+  if (item.jointType === 'none') {
+    const { rollWidthM, cutLengthM } = orientNoJoint(d1M, d2M)
+    panels = [makePanel(rollWidthM, cutLengthM, false)]
     jointPositionDesc = 'No joint'
   } else if (item.jointType === 'center') {
-    // Split lengthM (the longer dim) in half
-    const half = lengthM / 2
-    panels = [
-      makePanel(widthM, half, true),
-      makePanel(widthM, half, true),
-    ]
-    jointPositionDesc = `Center joint at ${(half * 1000).toFixed(0)}mm from each end`
+    const { panels: p, desc } = bestCenterJointPanels(d1M, d2M)
+    panels = p
+    jointPositionDesc = desc
   } else {
-    // off-center
-    const pos = (item.jointPosition ?? 0) / 1000 // mm → m
-    const p1len = Math.max(0.01, pos)
-    const p2len = Math.max(0.01, lengthM - p1len)
-    panels = [
-      makePanel(widthM, p1len, true),
-      makePanel(widthM, p2len, true),
-    ]
-    jointPositionDesc = `Joint at ${item.jointPosition}mm from one end`
+    // off-center: split the larger dimension at jointPosition mm from one end
+    const posM = (item.jointPosition ?? 0) / 1000
+    const p1 = Math.max(0.01, posM)
+    const p2 = Math.max(0.01, larger - p1)
+    panels = [makePanel(p1, smaller, true), makePanel(p2, smaller, true)]
+    jointPositionDesc = `Joint at ${item.jointPosition}mm from one end (${(larger * 1000).toFixed(0)}mm dimension split)`
   }
 
   const totalBilledArea = round2(panels.reduce((s, p) => s + p.panelArea, 0))
@@ -147,19 +167,15 @@ function getGeometry(item: CeilingItem) {
       const { dim1, dim2 } = readTwoDims(item.dimensions)
       const d1M = toM(dim1, u), d2M = toM(dim2, u)
       const d1MM = toMM(dim1, u), d2MM = toMM(dim2, u)
-      // Smart orientation: try both as roll width, pick less wastage
-      const roll1 = bestRollForWidth(d1M)
-      const roll2 = bestRollForWidth(d2M)
-      const waste1 = (roll1 - d1M) * d2M
-      const waste2 = (roll2 - d2M) * d1M
-      const widthM = waste1 <= waste2 ? d1M : d2M
-      const lengthM = waste1 <= waste2 ? d2M : d1M
+      // widthM = the dimension that must be the roll axis (fits in a ≤5m roll)
+      // If only one fits it's forced; if both fit pick min wastage; if neither, use smaller
+      const { rollWidthM, cutLengthM } = orientNoJoint(d1M, d2M)
       return {
         dim1M: d1M, dim2M: d2M,
-        widthM, lengthM,
+        widthM: rollWidthM, lengthM: cutLengthM,
         areaM2: d1M * d2M,
         perimeterM: 2 * (d1M + d2M),
-        dim1MM: d1MM, dim2MM: d2MM,
+        dim1MM, dim2MM,
       }
     }
     case 'circle': {
@@ -353,8 +369,8 @@ export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: 
   const { widthM, lengthM, areaM2, perimeterM } = geo
   const lineItems: LineItem[] = []
 
-  // Fabric
-  const fabricDetail = computeFabricDetail(widthM, lengthM, item)
+  // Fabric — pass raw dimensions so computeFabricDetail can pick orientation by joint type
+  const fabricDetail = computeFabricDetail(geo.dim1M, geo.dim2M, item)
   const fabPrice = FABRIC[item.fabricType] ?? FABRIC['Descor Premium']
   lineItems.push({
     description: `${item.fabricType} Fabric [${fabricDetail.panels[0]?.orientation ?? ''}, waste ${fabricDetail.totalWastageArea.toFixed(2)} sqm]`,

@@ -75,10 +75,13 @@ export default function CeilingItemForm({ item, index, priceTier, onChange, onRe
   const d = item.dimensions as unknown as Record<string, number>
   const hasLights = item.lightType !== 'none'
 
-  // Compute whether both dims exceed 5000mm
+  // Compute dimensions in mm for roll-width eligibility checks
   const dim1MM = item.unit === 'mm' ? (d.dim1 ?? 0) : item.unit === 'feet' ? (d.dim1 ?? 0) * 304.8 : (d.dim1 ?? 0) * 1000
   const dim2MM = item.unit === 'mm' ? (d.dim2 ?? 0) : item.unit === 'feet' ? (d.dim2 ?? 0) * 304.8 : (d.dim2 ?? 0) * 1000
-  const bothOver5k = item.shape === 'rectangle' && dim1MM > 5000 && dim2MM > 5000
+  const d1FitsRoll = dim1MM > 0 && dim1MM <= 5000
+  const d2FitsRoll = dim2MM > 0 && dim2MM <= 5000
+  const neitherFitsRoll = item.shape === 'rectangle' && dim1MM > 0 && dim2MM > 0 && !d1FitsRoll && !d2FitsRoll
+  const onlyOneFitsRoll = item.shape === 'rectangle' && (d1FitsRoll !== d2FitsRoll)
 
   // Live calc preview
   const preview = useMemo(() => {
@@ -270,10 +273,27 @@ export default function CeilingItemForm({ item, index, priceTier, onChange, onRe
             )}
           </div>
 
-          {/* Joint detection (only when both dims > 5000mm for rectangles) */}
-          {bothOver5k && (
+          {/* Joint option — always available for rectangles */}
+          {item.shape === 'rectangle' && dim1MM > 0 && dim2MM > 0 && (
             <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
-              <label className="label">Joint Type (both dims &gt; 5000mm)</label>
+              <label className="label mb-1">Joint Option</label>
+              {neitherFitsRoll && (
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 mb-2">
+                  Both dimensions exceed 5m — a joint is required. Select center or off-center below.
+                </p>
+              )}
+              {onlyOneFitsRoll && (
+                <p className="text-xs text-slate-500 mb-2">
+                  {dim1MM > 5000 || dim2MM > 5000
+                    ? `One dimension exceeds 5m max roll width — without joint, the fabric is oriented so the fitting dimension is the roll axis. With joint, the larger dimension is split so each piece fits a smaller roll (lower wastage).`
+                    : 'Both dimensions fit within available rolls. A joint reduces billed area when split orientation gives lower wastage.'}
+                </p>
+              )}
+              {!neitherFitsRoll && !onlyOneFitsRoll && (
+                <p className="text-xs text-slate-500 mb-2">
+                  Both dimensions fit available rolls. Without joint, the lower-waste orientation is used automatically. With joint, the fabric is split for even lower wastage or client preference.
+                </p>
+              )}
               <div className="flex gap-2 flex-wrap">
                 {(['none', 'center', 'off-center'] as JointType[]).map(j => (
                   <button key={j} type="button"
@@ -284,13 +304,18 @@ export default function CeilingItemForm({ item, index, priceTier, onChange, onRe
                         : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
                     }`}
                   >
-                    {j === 'none' ? 'No Joint (auto)' : j === 'center' ? 'Center Joint' : 'Off-Center Joint'}
+                    {j === 'none' ? 'No Joint' : j === 'center' ? 'Center Joint' : 'Off-Center Joint'}
                   </button>
                 ))}
               </div>
+              {item.jointType !== 'none' && (
+                <p className="text-xs text-indigo-600 mt-2">
+                  Joint: the larger dimension is split. Each half becomes a roll-axis piece; the smaller dimension is the cut length. See Smart Calc Preview for exact panels and wastage.
+                </p>
+              )}
               {item.jointType === 'off-center' && (
                 <div className="mt-3 max-w-xs">
-                  <label className="label">Joint Position (mm from one edge)</label>
+                  <label className="label">Joint Position (mm from one end of the larger dimension)</label>
                   <input type="number" min="0" className="input"
                     value={item.jointPosition || ''}
                     onChange={e => set('jointPosition', parseFloat(e.target.value) || 0)} />
