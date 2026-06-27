@@ -47,11 +47,12 @@ interface Props {
   item: CeilingItem
   index: number
   priceTier: import('@/lib/types').PriceTier
+  installRatePerSqft?: number
   onChange: (item: CeilingItem) => void
   onRemove: () => void
 }
 
-export default function CeilingItemForm({ item, index, priceTier, onChange, onRemove }: Props) {
+export default function CeilingItemForm({ item, index, priceTier, installRatePerSqft, onChange, onRemove }: Props) {
   const [open, setOpen] = useState(true)
 
   function set<K extends keyof CeilingItem>(key: K, value: CeilingItem[K]) {
@@ -86,11 +87,11 @@ export default function CeilingItemForm({ item, index, priceTier, onChange, onRe
   // Live calc preview
   const preview = useMemo(() => {
     try {
-      return calculateItem(item, priceTier)
+      return calculateItem(item, priceTier, installRatePerSqft)
     } catch {
       return null
     }
-  }, [item, priceTier])
+  }, [item, priceTier, installRatePerSqft])
 
   const stripCount = hasLights ? Math.max(1, Math.floor((item.lightDepth ?? 6) / 6)) : 0
 
@@ -439,12 +440,16 @@ export default function CeilingItemForm({ item, index, priceTier, onChange, onRe
                 <p>• LED: {preview.ledDetail.stripCount} strip{preview.ledDetail.stripCount > 1 ? 's' : ''} × {preview.ledDetail.runningLengthM.toFixed(2)}m = {preview.ledDetail.totalRunningMeters} mtr running | {preview.ledDetail.totalWatts}W total</p>
               )}
               {(() => {
-                const gripperQty = preview.fabricDetail.hasJoint && preview.fabricDetail.panels.length > 0
-                  ? round2(round2(preview.perimeterM * 10) / 10 + preview.fabricDetail.panels[0].cutLength)
+                const panels = preview.fabricDetail.panels
+                const hasJoint = preview.fabricDetail.hasJoint && panels.length > 1
+                const gripperQty = hasJoint
+                  ? round2(panels.reduce((s, p) => s + 2 * (p.physicalWidth + p.cutLength), 0))
                   : Math.ceil(preview.perimeterM * 10) / 10
-                const jointLine = preview.fabricDetail.hasJoint ? preview.fabricDetail.panels[0]?.cutLength : null
+                const jointNote = hasJoint
+                  ? ` (${panels.map((p, i) => `P${i+1}: 2×(${p.physicalWidth.toFixed(2)}+${p.cutLength.toFixed(2)})m`).join(', ')})`
+                  : ''
                 return (
-                  <p>• Gripper: {gripperQty.toFixed(2)} rmt {item.gripperType}{jointLine ? ` (perimeter ${round2(preview.perimeterM).toFixed(2)} + ${jointLine.toFixed(2)}m joint line)` : ''}</p>
+                  <p>• Gripper: {gripperQty.toFixed(2)} rmt {item.gripperType}{jointNote}</p>
                 )
               })()}
               <p className="font-semibold pt-1">Item subtotal: {fmtINR(preview.subtotalFinal)} + {fmtINR(preview.installationCost)} install</p>

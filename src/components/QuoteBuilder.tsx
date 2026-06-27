@@ -310,6 +310,7 @@ export default function QuoteBuilder({ initial, mode }: Props) {
                 item={item}
                 index={idx}
                 priceTier={meta.priceTier}
+                installRatePerSqft={meta.installationRatePerSqft}
                 onChange={updated => updateItem(idx, updated)}
                 onRemove={() => removeItem(idx)}
               />

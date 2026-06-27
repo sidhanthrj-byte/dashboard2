@@ -68,6 +68,7 @@ export interface LineItem {
 
 export interface FabricPanel {
   rollWidth: number
+  physicalWidth: number  // actual piece width (≤ rollWidth); cutLength is the other physical dim
   cutLength: number
   panelArea: number
   usedArea: number

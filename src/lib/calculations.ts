@@ -51,6 +51,7 @@ function makePanel(
   const wastagePercent = panelArea > 0 ? round2((wastageArea / panelArea) * 100) : 0
   return {
     rollWidth: roll,
+    physicalWidth: round2(rollAxisM),
     cutLength: round2(cutLengthM),
     panelArea,
     usedArea,
@@ -401,17 +402,25 @@ export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: 
     })
   }
 
-  // Gripper
-  let gripQty = Math.ceil(perimeterM * 10) / 10
-  // Add gripper for joint line if jointed.
-  // The joint line length = the cut length of each panel (the dimension perpendicular to the split).
-  if (fabricDetail.hasJoint && fabricDetail.panels.length > 0) {
-    const jointLineM = fabricDetail.panels[0].cutLength
-    gripQty = round2(gripQty + jointLineM)
+  // Gripper — each panel (fabric box) needs its own perimeter
+  let gripQty: number
+  let gripDesc: string
+  if (fabricDetail.hasJoint && fabricDetail.panels.length > 1) {
+    // Sum perimeters of all physical panels: 2*(physicalWidth + cutLength) per panel
+    gripQty = round2(
+      fabricDetail.panels.reduce((s, p) => s + 2 * (p.physicalWidth + p.cutLength), 0)
+    )
+    const panelDescs = fabricDetail.panels.map((p, i) =>
+      `P${i+1}: 2×(${p.physicalWidth.toFixed(2)}+${p.cutLength.toFixed(2)})m`
+    ).join(', ')
+    gripDesc = `${item.gripperType} Gripper (${panelDescs})`
+  } else {
+    gripQty = Math.ceil(perimeterM * 10) / 10
+    gripDesc = `${item.gripperType} Gripper`
   }
   const gripPrice = GRIPPER[item.gripperType] ?? GRIPPER['CW']
   lineItems.push({
-    description: `${item.gripperType} Gripper${fabricDetail.hasJoint ? ` (incl. ${round2(fabricDetail.panels[0]?.cutLength ?? 0)}m joint line)` : ''}`,
+    description: gripDesc,
     qty: round2(gripQty), unit: 'rmt',
     dealerRate: gripPrice.dealer, tierRate: p(gripPrice, tier),
     dealerAmount: round2(gripQty * gripPrice.dealer),
