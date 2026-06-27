@@ -278,15 +278,16 @@ export default async function ClientPage({ params }: { params: { id: string } })
             </div>
 
             {/* ── Quotation table ── */}
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+            <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', minWidth: '500px' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid #E0E0E0', backgroundColor: '#F8F8F8' }}>
                   {[
                     { h: 'Article No.', align: 'left' as const },
                     { h: 'Description', align: 'left' as const },
                     { h: 'HSN', align: 'center' as const },
-                    { h: 'Qty (sqm)', align: 'right' as const },
-                    { h: 'Rate', align: 'right' as const },
+                    { h: 'Qty', align: 'right' as const },
+                    { h: 'Unit Price', align: 'right' as const },
                     { h: 'Amount', align: 'right' as const },
                   ].map(({ h, align }) => (
                     <th key={h} style={{ padding: '9px 10px', textAlign: align, fontSize: '9px', fontWeight: 700, color: '#555', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
@@ -298,8 +299,9 @@ export default async function ClientPage({ params }: { params: { id: string } })
               <tbody>
                 {bd.itemBreakdowns.map((itemBd, idx) => {
                   const item = itemBd.item
-                  const areaSqm = round2(itemBd.areaM2)
-                  const unitPrice = areaSqm > 0 ? round2(itemBd.subtotalFinal / areaSqm / item.quantity) : 0
+                  // unit price = full cost for 1 unit (materials + installation)
+                  const unitPrice = round2(itemBd.itemTotal / item.quantity)
+                  const totalAmount = itemBd.itemTotal
                   return (
                     <tr key={item.id} style={{ borderBottom: '1px solid #F0F0F0', backgroundColor: idx % 2 === 1 ? '#FAFAFA' : 'white' }}>
                       <td style={{ padding: '11px 10px', verticalAlign: 'top', color: '#888', fontWeight: 600, fontSize: '10px', whiteSpace: 'nowrap' }}>
@@ -307,7 +309,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
                       </td>
                       <td style={{ padding: '11px 10px', verticalAlign: 'top', maxWidth: '260px' }}>
                         <p style={{ fontWeight: 700, color: '#111', marginBottom: '3px', lineHeight: 1.3, fontSize: '11px' }}>
-                          {item.name || 'Stretch Ceiling System'}{item.quantity > 1 ? ` (×${item.quantity})` : ''}
+                          {item.name || 'Stretch Ceiling System'}
                         </p>
                         <p style={{ color: '#888', fontSize: '10px', lineHeight: 1.5 }}>
                           {item.fabricType} &nbsp;·&nbsp; {formatDims(item)}
@@ -322,9 +324,9 @@ export default async function ClientPage({ params }: { params: { id: string } })
                         {item.notes        && <p style={{ color: '#bbb', fontSize: '10px', fontStyle: 'italic', marginTop: '2px' }}>{item.notes}</p>}
                       </td>
                       <td style={{ padding: '11px 10px', verticalAlign: 'top', textAlign: 'center', color: '#888', fontSize: '10px' }}>{HSN_CEILING}</td>
-                      <td style={{ padding: '11px 10px', verticalAlign: 'top', textAlign: 'right', color: '#111', fontWeight: 600 }}>{areaSqm.toFixed(2)}</td>
+                      <td style={{ padding: '11px 10px', verticalAlign: 'top', textAlign: 'right', color: '#111', fontWeight: 600 }}>{item.quantity}</td>
                       <td style={{ padding: '11px 10px', verticalAlign: 'top', textAlign: 'right', color: '#555', whiteSpace: 'nowrap' }}>{fmtINR(unitPrice)}</td>
-                      <td style={{ padding: '11px 10px', verticalAlign: 'top', textAlign: 'right', fontWeight: 700, color: '#111', whiteSpace: 'nowrap' }}>{fmtINR(itemBd.subtotalFinal)}</td>
+                      <td style={{ padding: '11px 10px', verticalAlign: 'top', textAlign: 'right', fontWeight: 700, color: '#111', whiteSpace: 'nowrap' }}>{fmtINR(totalAmount)}</td>
                     </tr>
                   )
                 })}
@@ -373,6 +375,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
                 </tr>
               </tbody>
             </table>
+            </div>
 
             {quote.displayMode === 'per-sqft' && bd.totalSqft > 0 && (
               <p style={{ textAlign: 'right', fontSize: '10px', color: '#aaa', marginTop: '5px' }}>

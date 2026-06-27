@@ -509,11 +509,13 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
               {preview.fabricDetail.panels.map((panel, i) => (
                 <p key={i}>• {preview.fabricDetail.panels.length > 1 ? `Panel ${i+1}: ` : ''}Roll: {panel.orientation} | Waste: {panel.wastageArea.toFixed(2)} sqm ({panel.wastagePercent.toFixed(1)}%)</p>
               ))}
-              {preview.fabricDetail.panels.length > 1 && (
-                <p>• Total billed fabric: {preview.fabricDetail.totalBilledArea.toFixed(2)} sqm (used {preview.fabricDetail.totalUsedArea.toFixed(2)} sqm, waste {preview.fabricDetail.totalWastageArea.toFixed(2)} sqm)</p>
+              {preview.fabricDetail.panels.length > 1 ? (
+                <p>• Total billed fabric: {round2(preview.fabricDetail.totalBilledArea * item.quantity).toFixed(2)} sqm{item.quantity > 1 ? ` (${preview.fabricDetail.totalBilledArea.toFixed(2)} × ${item.quantity})` : ''}</p>
+              ) : (
+                <p>• Fabric billed: {round2(preview.fabricDetail.totalBilledArea * item.quantity).toFixed(2)} sqm{item.quantity > 1 ? ` (${preview.fabricDetail.totalBilledArea.toFixed(2)} × ${item.quantity})` : ''}</p>
               )}
               {preview.ledDetail && (
-                <p>• LED: {preview.ledDetail.stripCount} strip{preview.ledDetail.stripCount > 1 ? 's' : ''} × {preview.ledDetail.runningLengthM.toFixed(2)}m = {preview.ledDetail.totalRunningMeters} mtr running | {preview.ledDetail.totalWatts}W total</p>
+                <p>• LED: {preview.ledDetail.stripCount * item.quantity} strip{preview.ledDetail.stripCount * item.quantity > 1 ? 's' : ''}{item.quantity > 1 ? ` (${preview.ledDetail.stripCount}×${item.quantity})` : ''} × {preview.ledDetail.runningLengthM.toFixed(2)}m = {round2(preview.ledDetail.totalRunningMeters * item.quantity)} mtr running | {round2(preview.ledDetail.totalWatts * item.quantity)}W total</p>
               )}
               {(() => {
                 const panels = preview.fabricDetail.panels
@@ -525,7 +527,7 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
                   ? ` (${panels.map((p, i) => `P${i+1}: 2×(${p.physicalWidth.toFixed(2)}+${p.cutLength.toFixed(2)})m`).join(', ')})`
                   : ''
                 return (
-                  <p>• Gripper: {gripperQty.toFixed(2)} rmt {item.gripperType}{jointNote}</p>
+                  <p>• Gripper: {round2(gripperQty * item.quantity).toFixed(2)} rmt {item.gripperType}{item.quantity > 1 ? ` (${gripperQty.toFixed(2)} × ${item.quantity})` : ''}{jointNote}</p>
                 )
               })()}
               {/* Drivers & Controls with manual override */}
@@ -553,7 +555,7 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
                             <input
                               type="number"
                               min={0}
-                              key={`${auto.description}-${auto.qty}`}
+                              key={`${auto.description}-${auto.qty}-${overrideVal ?? 'x'}`}
                               defaultValue={displayQty}
                               onBlur={e => {
                                 const v = parseInt(e.target.value)
@@ -593,7 +595,7 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
                   </div>
                 )
               })()}
-              <p className="font-semibold pt-1">Item subtotal: {fmtINR(preview.subtotalFinal)} + {fmtINR(preview.installationCost)} install</p>
+              <p className="font-semibold pt-1">Item total{item.quantity > 1 ? ` (×${item.quantity})` : ''}: {fmtINR(preview.itemTotal)}</p>
             </div>
           )}
 

@@ -123,23 +123,29 @@ export default async function InternalPage({ params }: { params: { id: string } 
                 </tr>
               </thead>
               <tbody>
-                {item.lineItems.map((li, li_idx) => (
+                {item.lineItems.map((li, li_idx) => {
+                  const qty = item.item.quantity
+                  const totalQty = round2(li.qty * qty)
+                  const totalAmt = round2(li.tierAmount * qty)
+                  return (
                   <tr key={li_idx} className="border-b border-slate-100 hover:bg-slate-50">
                     <td className="px-5 py-2.5 text-xs text-slate-400">{li_idx + 1}</td>
                     <td className="px-3 py-2.5 text-slate-700">{li.description}</td>
-                    <td className="px-3 py-2.5 text-right text-slate-700">{li.qty}</td>
+                    <td className="px-3 py-2.5 text-right text-slate-700">{totalQty}{qty > 1 && <span className="text-xs text-slate-400 ml-1">({li.qty}×{qty})</span>}</td>
                     <td className="px-3 py-2.5 text-right text-slate-500 text-xs">{li.unit}</td>
                     <td className="px-3 py-2.5 text-right text-slate-600">{fmtINR(li.tierRate)}</td>
-                    <td className="px-5 py-2.5 text-right font-medium text-slate-800">{fmtINR(li.tierAmount)}</td>
+                    <td className="px-5 py-2.5 text-right font-medium text-slate-800">{fmtINR(totalAmt)}</td>
                   </tr>
-                ))}
+                  )
+                })}
                 {/* Installation */}
                 <tr className="border-b border-slate-100 bg-green-50">
                   <td className="px-5 py-2.5 text-xs text-slate-400">{item.lineItems.length + 1}</td>
                   <td className="px-3 py-2.5 text-slate-700">
-                    Installation · {round2(item.areaM2 * 10.7639).toFixed(2)} sqft @ ₹{quote.installationRatePerSqft}/sqft
+                    Installation · {round2(item.areaM2 * 10.7639 * item.item.quantity).toFixed(2)} sqft @ ₹{quote.installationRatePerSqft}/sqft
+                    {item.item.quantity > 1 && <span className="text-xs text-slate-400 ml-1">({round2(item.areaM2 * 10.7639).toFixed(2)} × {item.item.quantity})</span>}
                   </td>
-                  <td className="px-3 py-2.5 text-right text-slate-700">{round2(item.areaM2 * 10.7639).toFixed(2)}</td>
+                  <td className="px-3 py-2.5 text-right text-slate-700">{round2(item.areaM2 * 10.7639 * item.item.quantity).toFixed(2)}</td>
                   <td className="px-3 py-2.5 text-right text-slate-500 text-xs">sqft</td>
                   <td className="px-3 py-2.5 text-right text-slate-600">₹{quote.installationRatePerSqft}</td>
                   <td className="px-5 py-2.5 text-right font-medium text-green-700">{fmtINR(item.installationCost)}</td>
