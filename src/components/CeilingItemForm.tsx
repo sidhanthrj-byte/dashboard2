@@ -40,8 +40,10 @@ export function defaultItem(id: string): CeilingItem {
     jointType: 'none',
     jointPosition: 0,
     ledSpacingMM: 125,
+    ledModuleType: 'standard',
     daliDriver: 'dt8',
     driverOverrides: {},
+    printingRatePerSqm: undefined,
     notes: '',
   }
 }
@@ -167,7 +169,7 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
               <input
                 type="number" min={1} className="input"
                 value={item.quantity}
-                onChange={e => set('quantity', Math.max(1, parseInt(e.target.value) || 1))}
+                onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 1) set('quantity', v) }}
               />
             </div>
           </div>
@@ -344,6 +346,21 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
                   onChange={e => set('withPrinting', e.target.checked)} />
                 Add Printing Charges
               </label>
+              {item.withPrinting && (
+                <div className="ml-6 max-w-[160px]">
+                  <label className="label text-xs">Printing Rate (₹/sqm)</label>
+                  <input
+                    type="number" min="0" step="50" className="input text-sm"
+                    placeholder="Standard rate"
+                    value={item.printingRatePerSqm ?? ''}
+                    onChange={e => {
+                      const v = parseFloat(e.target.value)
+                      set('printingRatePerSqm', isNaN(v) ? undefined : v)
+                    }}
+                  />
+                  <p className="text-xs text-slate-400 mt-0.5">Leave blank for standard</p>
+                </div>
+              )}
               <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
                 <input type="checkbox" className="rounded border-slate-300"
                   checked={item.withFleece}
@@ -371,7 +388,11 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
               {LIGHT_OPTIONS.map(opt => (
                 <button
                   key={opt.value} type="button"
-                  onClick={() => set('lightType', opt.value)}
+                  onClick={() => {
+                    const isSC = opt.value === 'single_color' || opt.value === 'single_color_dimmable'
+                    const defaultSpacing = isSC ? 150 : 125
+                    onChange({ ...item, lightType: opt.value, ledSpacingMM: defaultSpacing })
+                  }}
                   className={`p-3 rounded-lg border text-left transition-all ${
                     item.lightType === opt.value
                       ? 'border-slate-700 bg-slate-800 text-white'
@@ -445,14 +466,38 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
                   <p className="text-xs text-slate-500 mt-1">Max 10 modules per driver · DA4m at 1 per 3 DT8</p>
                 </div>
               )}
+              {/* 12-dot module option for single colour */}
+              {(item.lightType === 'single_color' || item.lightType === 'single_color_dimmable') && (
+                <div>
+                  <label className="label">Module Type</label>
+                  <div className="flex gap-2">
+                    {([['standard', 'Standard'], ['12dot', '12 Dot']] as const).map(([val, label]) => (
+                      <button key={val} type="button"
+                        onClick={() => set('ledModuleType', val)}
+                        className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
+                          (item.ledModuleType ?? 'standard') === val
+                            ? 'border-slate-700 bg-slate-800 text-white'
+                            : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                        }`}
+                      >{label}</button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">12 Dot = 12-dot/m module (same 13W/m)</p>
+                </div>
+              )}
               <div className="max-w-[160px]">
                 <label className="label">Strip Gap (mm)</label>
                 <input
                   type="number" min="50" max="500" step="5" className="input"
                   value={item.ledSpacingMM ?? 125}
-                  onChange={e => set('ledSpacingMM', parseFloat(e.target.value) || 125)}
+                  onChange={e => {
+                    const v = parseFloat(e.target.value)
+                    if (!isNaN(v) && v > 0) set('ledSpacingMM', v)
+                  }}
                 />
-                <p className="text-xs text-slate-500 mt-1">Gap between LED strips (default 125mm)</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  Default: {(item.lightType === 'single_color' || item.lightType === 'single_color_dimmable') ? '150' : '125'}mm
+                </p>
               </div>
             </div>
           )}
@@ -508,39 +553,37 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
                             <input
                               type="number"
                               min={0}
-                              max={auto.qty}
                               value={displayQty}
                               onChange={e => {
                                 const v = parseInt(e.target.value)
+                                if (isNaN(v) || v < 0) return
                                 const newOv = { ...(item.driverOverrides ?? {}) }
-                                if (!isNaN(v) && v >= 0 && v < auto.qty) {
-                                  newOv[auto.description] = v
-                                } else {
+                                if (v === auto.qty) {
                                   delete newOv[auto.description]
+                                } else {
+                                  newOv[auto.description] = v
                                 }
                                 onChange({ ...item, driverOverrides: newOv })
                               }}
                               className="w-14 px-1.5 py-0.5 rounded border border-indigo-300 bg-white text-indigo-900 text-center text-xs"
                             />
-                            <span className={isOverridden ? 'line-through text-indigo-400' : ''}>
-                              {isOverridden ? `${auto.qty}` : ''}{isOverridden ? '' : '×'}
-                            </span>
-                            <span className={isOverridden ? 'text-indigo-400' : ''}>
+                            <span className="text-indigo-700 text-xs">×</span>
+                            <span className={`text-xs ${isOverridden ? 'text-indigo-600 font-medium' : ''}`}>
                               {auto.description.replace(/ \[.*?\]/, '')}
                             </span>
                             {isOverridden && (
-                              <>
-                                <span className="text-indigo-700">→ {displayQty} ×</span>
-                                <button
-                                  type="button"
-                                  className="text-indigo-500 underline ml-1"
-                                  onClick={() => {
-                                    const newOv = { ...(item.driverOverrides ?? {}) }
-                                    delete newOv[auto.description]
-                                    onChange({ ...item, driverOverrides: newOv })
-                                  }}
-                                >reset</button>
-                              </>
+                              <span className="text-indigo-400 text-xs">(auto: {auto.qty})</span>
+                            )}
+                            {isOverridden && (
+                              <button
+                                type="button"
+                                className="text-indigo-400 underline text-xs ml-1"
+                                onClick={() => {
+                                  const newOv = { ...(item.driverOverrides ?? {}) }
+                                  delete newOv[auto.description]
+                                  onChange({ ...item, driverOverrides: newOv })
+                                }}
+                              >reset</button>
                             )}
                           </div>
                         )

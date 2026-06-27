@@ -29,12 +29,13 @@ export const GRIPPER: Record<string, Price> = {
 }
 
 export const LED: Record<string, Price> = {
-  'Single Colour':       { dealer: 170, msp: 270, specifiors: 220 },
-  'Tunable':             { dealer: 270, msp: 370, specifiors: 320 },
-  'RGB':                 { dealer: 220, msp: 320, specifiors: 270 },
-  'RGBW/NW/WW':          { dealer: 270, msp: 370, specifiors: 345 },
-  'Wider Single Colour': { dealer: 220, msp: 320, specifiors: 270 },
-  'Wider Tunable':       { dealer: 370, msp: 470, specifiors: 425 },
+  'Single Colour':          { dealer: 170, msp: 270, specifiors: 220 },
+  'Single Colour 12Dot':    { dealer: 170, msp: 270, specifiors: 220 },
+  'Tunable':                { dealer: 270, msp: 370, specifiors: 320 },
+  'RGB':                    { dealer: 220, msp: 320, specifiors: 270 },
+  'RGBW/NW/WW':             { dealer: 270, msp: 370, specifiors: 345 },
+  'Wider Single Colour':    { dealer: 220, msp: 320, specifiors: 270 },
+  'Wider Tunable':          { dealer: 370, msp: 470, specifiors: 425 },
 }
 
 // 1 LED module = 1000mm = 13W (tunable: 16 dots, single colour: 10 dots)

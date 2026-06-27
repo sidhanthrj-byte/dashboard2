@@ -232,25 +232,24 @@ function ledKey(item: CeilingItem): string {
     return item.ledWidth === 'wider' ? 'Wider Tunable' : 'Tunable'
   if (item.lightType === 'rgb') return 'RGB'
   if (item.lightType === 'rgbw') return 'RGBW/NW/WW'
-  return item.ledWidth === 'wider' ? 'Wider Single Colour' : 'Single Colour'
+  if (item.ledWidth === 'wider') return 'Wider Single Colour'
+  return item.ledModuleType === '12dot' ? 'Single Colour 12Dot' : 'Single Colour'
 }
 
 // Module-count limits per driver type (per Pongs LED Module & Driver Guide)
 const DALI_TW_MOD_PER_DRV  = 10  // DT8 150W / DA4m — tunable white DALI (max 10 modules)
 const DALI_SC_MOD_PER_DRV  = 13  // DT2 200W  — single colour DALI dimmable
 
-// Standard driver module capacities (module count, not watt-based)
+// Standard driver module capacities at 85% load: floor(watts * 0.85 / 13)
 const STD_TW_DRIVERS = [
-  { key: '600W', modules: 38 },
-  { key: '450W', modules: 28 },
+  { key: '600W', modules: 39 },
+  { key: '450W', modules: 29 },
   { key: '200W', modules: 13 },
 ]
-/// Single colour uses 95% of driver capacity: 600W→57, 450W→42, 200W→18 (modules = floor(watts*0.95/13))
-// 600W*0.95=570W → floor(570/13)=43 modules; using rounded practical values: 600W→43, 450W→32, 200W→14
 const STD_SC_DRIVERS = [
-  { key: '600W', modules: 43 },
-  { key: '450W', modules: 32 },
-  { key: '200W', modules: 14 },
+  { key: '600W', modules: 39 },
+  { key: '450W', modules: 29 },
+  { key: '200W', modules: 13 },
 ]
 
 // Greedily pack modules into fewest drivers, using largest first
@@ -368,26 +367,27 @@ export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: 
   // Fabric
   let fabricDetail: FabricDetail
   if (item.shape === 'circle') {
-    // Circles: bill as piece (no roll-width factor), 200mm per side margin on both dimensions
+    // Circles: roll billing with 1m minimum roll width; cut = diameter + 400mm (200mm per side)
     const D = geo.dim1M
-    const pieceW = Math.ceil(D * 10) / 10          // round up to nearest 0.1m
-    const pieceL = round2(D + 0.4)                  // diameter + 200mm each end
-    const billedArea = round2(pieceW * pieceL)
+    const CIRCLE_ROLLS = [1, 2, 3, 4, 5]
+    const roll = CIRCLE_ROLLS.find(r => r >= D) ?? 5
+    const cutLength = round2(D + 0.4)
+    const panelArea = round2(roll * cutLength)
     const usedArea = round2(Math.PI * (D / 2) ** 2) // actual circle area
-    const wastageArea = round2(billedArea - usedArea)
+    const wastageArea = round2(panelArea - usedArea)
     fabricDetail = {
       panels: [{
-        rollWidth: pieceW,
-        physicalWidth: pieceW,
-        cutLength: pieceL,
-        panelArea: billedArea,
+        rollWidth: roll,
+        physicalWidth: round2(D),
+        cutLength,
+        panelArea,
         usedArea,
         wastageArea,
-        wastagePercent: round2((wastageArea / billedArea) * 100),
-        orientation: `${pieceW}m × ${pieceL.toFixed(2)}m piece (200mm margin)`,
+        wastagePercent: round2((wastageArea / panelArea) * 100),
+        orientation: `${roll}m roll × ${cutLength.toFixed(2)}m cut (circle, 200mm margin)`,
         isJoint: false,
       }],
-      totalBilledArea: billedArea,
+      totalBilledArea: panelArea,
       totalUsedArea: usedArea,
       totalWastageArea: wastageArea,
       hasJoint: false,
@@ -408,12 +408,13 @@ export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: 
   })
 
   if (item.withPrinting) {
+    const printRate = item.printingRatePerSqm ?? p(PRINTING, effectiveTier)
     lineItems.push({
       description: 'Printing Charges',
       qty: round2(areaM2), unit: 'sqm',
-      dealerRate: PRINTING.dealer, tierRate: p(PRINTING, effectiveTier),
+      dealerRate: PRINTING.dealer, tierRate: printRate,
       dealerAmount: round2(areaM2 * PRINTING.dealer),
-      tierAmount:   round2(areaM2 * p(PRINTING, effectiveTier)),
+      tierAmount:   round2(areaM2 * printRate),
     })
   }
 
@@ -484,11 +485,11 @@ export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: 
     })
 
     const driverLines = buildDriverLines(totalRunningMeters, item.lightType, effectiveTier, item.daliDriver)
-    // Apply manual overrides (user can reduce qty)
+    // Apply manual overrides — user can increase or decrease qty
     const overrides = item.driverOverrides ?? {}
     for (const dl of driverLines) {
       const ov = overrides[dl.description]
-      if (ov !== undefined && ov >= 0 && ov < dl.qty) {
+      if (ov !== undefined && ov >= 0 && ov !== dl.qty) {
         dl.qty = ov
         dl.dealerAmount = round2(ov * dl.dealerRate)
         dl.tierAmount = round2(ov * dl.tierRate)

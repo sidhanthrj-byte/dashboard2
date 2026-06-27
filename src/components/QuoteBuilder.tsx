@@ -118,7 +118,7 @@ export default function QuoteBuilder({ initial, mode }: Props) {
     setItems(prev => prev.filter((_, i) => i !== idx))
   }
 
-  async function handleSave() {
+  async function saveQuote(redirectTo: 'team' | 'internal' = 'team') {
     if (!meta.clientName.trim()) { alert('Please enter a client name.'); return }
     if (items.length === 0) { alert('Please add at least one ceiling item.'); return }
 
@@ -130,8 +130,10 @@ export default function QuoteBuilder({ initial, mode }: Props) {
     const savedQ = await res.json()
     setSaving(false)
     setSaved(true)
-    setTimeout(() => router.push(`/quotes/${savedQ.id}/team`), 800)
+    setTimeout(() => router.push(`/quotes/${savedQ.id}/${redirectTo}`), 800)
   }
+
+  function handleSave() { return saveQuote('team') }
 
   const TIER_OPTIONS: { value: PriceTier; label: string; desc: string }[] = [
     { value: 'dealer', label: 'Dealer', desc: 'Dealer pricing' },
@@ -455,6 +457,14 @@ export default function QuoteBuilder({ initial, mode }: Props) {
             ) : (
               <><Save size={16} /> {mode === 'edit' ? 'Update Quote' : 'Save Quote'}</>
             )}
+          </button>
+
+          <button
+            onClick={() => saveQuote('internal')}
+            disabled={saving || saved}
+            className="w-full btn btn-secondary text-sm py-2.5 font-semibold justify-center"
+          >
+            Save &amp; Open Internal Cost Review
           </button>
 
           {mode === 'edit' && (

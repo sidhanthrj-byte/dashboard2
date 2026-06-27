@@ -38,9 +38,11 @@ export interface CeilingItem {
   quantity: number
   jointType: JointType
   jointPosition: number
-  ledSpacingMM: number  // strip-to-strip gap in mm; default 125
+  ledSpacingMM: number  // strip-to-strip gap in mm; default 125 (150 for single colour)
+  ledModuleType: 'standard' | '12dot'  // single colour only; 12dot = 12-dot/m module
   daliDriver: 'dt8' | 'da4m'  // DALI tunable only: which driver type
-  driverOverrides: Record<string, number>  // manual qty overrides for driver/control line items
+  driverOverrides: Record<string, number>  // qty overrides for driver/control line items (can increase or decrease)
+  printingRatePerSqm?: number  // override standard printing rate
   notes: string
 }
 
