@@ -18,7 +18,7 @@ export default async function InternalPage({ params }: { params: { id: string } 
   const tierLabel = quote.priceTier === 'manual' ? 'Manual' : quote.priceTier.toUpperCase()
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-6">
+    <div className="max-w-4xl mx-auto px-4 py-6">
       {/* Nav */}
       <div className="no-print flex items-center justify-between mb-6">
         <div className="flex items-center gap-2 text-sm text-slate-400">
@@ -117,10 +117,8 @@ export default async function InternalPage({ params }: { params: { id: string } 
                   <th className="text-left px-3 py-2.5 font-semibold">Description</th>
                   <th className="text-right px-3 py-2.5 font-semibold">Qty</th>
                   <th className="text-right px-3 py-2.5 font-semibold">Unit</th>
-                  <th className="text-right px-3 py-2.5 font-semibold">Dealer Rate</th>
-                  <th className="text-right px-3 py-2.5 font-semibold">Quoted Rate</th>
-                  <th className="text-right px-3 py-2.5 font-semibold">Dealer Amt</th>
-                  <th className="text-right px-5 py-2.5 font-semibold">Quoted Amt</th>
+                  <th className="text-right px-3 py-2.5 font-semibold">Rate</th>
+                  <th className="text-right px-5 py-2.5 font-semibold">Amount</th>
                 </tr>
               </thead>
               <tbody>
@@ -130,9 +128,7 @@ export default async function InternalPage({ params }: { params: { id: string } 
                     <td className="px-3 py-2.5 text-slate-700">{li.description}</td>
                     <td className="px-3 py-2.5 text-right text-slate-700">{li.qty}</td>
                     <td className="px-3 py-2.5 text-right text-slate-500 text-xs">{li.unit}</td>
-                    <td className="px-3 py-2.5 text-right text-slate-500">{fmtINR(li.dealerRate)}</td>
-                    <td className="px-3 py-2.5 text-right text-slate-700">{fmtINR(li.tierRate)}</td>
-                    <td className="px-3 py-2.5 text-right text-slate-500">{fmtINR(li.dealerAmount)}</td>
+                    <td className="px-3 py-2.5 text-right text-slate-600">{fmtINR(li.tierRate)}</td>
                     <td className="px-5 py-2.5 text-right font-medium text-slate-800">{fmtINR(li.tierAmount)}</td>
                   </tr>
                 ))}
@@ -140,22 +136,19 @@ export default async function InternalPage({ params }: { params: { id: string } 
                 <tr className="border-b border-slate-100 bg-green-50">
                   <td className="px-5 py-2.5 text-xs text-slate-400">{item.lineItems.length + 1}</td>
                   <td className="px-3 py-2.5 text-slate-700">
-                    Installation Charges · {round2(item.areaM2 * 10.7639).toFixed(2)} sqft @ ₹{quote.installationRatePerSqft}/sqft
+                    Installation · {round2(item.areaM2 * 10.7639).toFixed(2)} sqft @ ₹{quote.installationRatePerSqft}/sqft
                   </td>
                   <td className="px-3 py-2.5 text-right text-slate-700">{round2(item.areaM2 * 10.7639).toFixed(2)}</td>
                   <td className="px-3 py-2.5 text-right text-slate-500 text-xs">sqft</td>
-                  <td className="px-3 py-2.5 text-right text-slate-500">₹{quote.installationRatePerSqft}</td>
-                  <td className="px-3 py-2.5 text-right text-slate-700">₹{quote.installationRatePerSqft}</td>
-                  <td className="px-3 py-2.5 text-right text-slate-500">{fmtINR(item.installationCost)}</td>
+                  <td className="px-3 py-2.5 text-right text-slate-600">₹{quote.installationRatePerSqft}</td>
                   <td className="px-5 py-2.5 text-right font-medium text-green-700">{fmtINR(item.installationCost)}</td>
                 </tr>
               </tbody>
               <tfoot>
                 <tr className="bg-slate-100 font-semibold">
-                  <td colSpan={6} className="px-5 py-3 text-right text-slate-700">
+                  <td colSpan={5} className="px-5 py-3 text-right text-slate-700">
                     Item Subtotal {item.item.quantity > 1 ? `(× ${item.item.quantity})` : ''}
                   </td>
-                  <td className="px-3 py-3 text-right text-slate-600">{fmtINR(item.subtotalDealer)}</td>
                   <td className="px-5 py-3 text-right text-slate-900">{fmtINR(item.itemTotal)}</td>
                 </tr>
               </tfoot>
@@ -169,12 +162,8 @@ export default async function InternalPage({ params }: { params: { id: string } 
         <table className="w-full text-sm">
           <tbody>
             <tr className="border-b border-slate-100">
-              <td className="px-5 py-3 text-slate-600">Materials Sub-total (Dealer)</td>
-              <td className="px-5 py-3 text-right text-slate-500">{fmtINR(bd.materialsTotalDealer)}</td>
-            </tr>
-            <tr className="border-b border-slate-100">
-              <td className="px-5 py-3 text-slate-700 font-medium">Materials Sub-total (Quoted — {tierLabel})</td>
-              <td className="px-5 py-3 text-right font-medium text-slate-800">{fmtINR(bd.materialsTotalFinal)}</td>
+              <td className="px-5 py-3 text-slate-600">Materials Sub-total</td>
+              <td className="px-5 py-3 text-right text-slate-700">{fmtINR(bd.materialsTotalFinal)}</td>
             </tr>
             <tr className="border-b border-slate-100">
               <td className="px-5 py-3 text-slate-600">Total Installation</td>
@@ -202,29 +191,6 @@ export default async function InternalPage({ params }: { params: { id: string } 
             </tr>
           </tbody>
         </table>
-
-        {/* Margin summary */}
-        <div className="px-5 py-4 bg-slate-50 border-t border-slate-200 grid grid-cols-3 gap-4 text-center text-sm">
-          <div>
-            <p className="text-xs text-slate-500 mb-0.5">Dealer Cost</p>
-            <p className="font-bold text-slate-700">{fmtINR(bd.materialsTotalDealer)}</p>
-          </div>
-          <div>
-            <p className="text-xs text-slate-500 mb-0.5">Quoted</p>
-            <p className="font-bold text-slate-900">{fmtINR(bd.materialsTotalFinal)}</p>
-          </div>
-          <div>
-            <p className="text-xs text-slate-500 mb-0.5">Margin</p>
-            <p className="font-bold text-emerald-600">
-              {fmtINR(bd.materialsTotalFinal - bd.materialsTotalDealer)}
-              {bd.materialsTotalDealer > 0 && (
-                <span className="text-xs font-normal text-emerald-500 ml-1">
-                  ({((bd.materialsTotalFinal - bd.materialsTotalDealer) / bd.materialsTotalDealer * 100).toFixed(1)}%)
-                </span>
-              )}
-            </p>
-          </div>
-        </div>
       </div>
     </div>
   )
