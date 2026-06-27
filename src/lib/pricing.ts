@@ -85,5 +85,6 @@ export const FLEECE: Price = { dealer: 500, msp: 1000, specifiors: 700 }
 export const ROLL_WIDTHS = [2, 3, 4, 5] // metres, ascending
 
 export function p(price: Price, tier: PriceTier): number {
+  if (tier === 'manual') return price.dealer
   return price[tier]
 }

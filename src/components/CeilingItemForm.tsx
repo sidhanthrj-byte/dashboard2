@@ -2,7 +2,7 @@
 
 import { Trash2, ChevronDown, ChevronUp } from 'lucide-react'
 import { useState, useMemo } from 'react'
-import type { CeilingItem, ShapeType, LightType, GripperType, LEDWidth, UnitSystem, SurfaceType, JointType } from '@/lib/types'
+import type { CeilingItem, ShapeType, LightType, GripperType, LEDWidth, UnitSystem, SurfaceType, JointType, ManualRates } from '@/lib/types'
 import { FABRIC } from '@/lib/pricing'
 import { calculateItem, fmtINR, round2 } from '@/lib/calculations'
 
@@ -51,11 +51,12 @@ interface Props {
   index: number
   priceTier: import('@/lib/types').PriceTier
   installRatePerSqft?: number
+  manualRates?: ManualRates
   onChange: (item: CeilingItem) => void
   onRemove: () => void
 }
 
-export default function CeilingItemForm({ item, index, priceTier, installRatePerSqft, onChange, onRemove }: Props) {
+export default function CeilingItemForm({ item, index, priceTier, installRatePerSqft, manualRates, onChange, onRemove }: Props) {
   const [open, setOpen] = useState(true)
 
   function set<K extends keyof CeilingItem>(key: K, value: CeilingItem[K]) {
@@ -90,11 +91,11 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
   // Live calc preview
   const preview = useMemo(() => {
     try {
-      return calculateItem(item, priceTier, installRatePerSqft)
+      return calculateItem(item, priceTier, installRatePerSqft, manualRates)
     } catch {
       return null
     }
-  }, [item, priceTier, installRatePerSqft])
+  }, [item, priceTier, installRatePerSqft, manualRates])
 
   const stripCount = hasLights ? Math.max(1, Math.floor((item.lightDepth ?? 6) / 6)) : 0
 
@@ -490,7 +491,7 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
                 // The preview already has overrides applied, so we read calculated qty from a fresh preview without overrides
                 const autoPreview = (() => {
                   try {
-                    return calculateItem({ ...item, driverOverrides: {} }, priceTier, installRatePerSqft)
+                    return calculateItem({ ...item, driverOverrides: {} }, priceTier, installRatePerSqft, manualRates)
                   } catch { return null }
                 })()
                 const autoItems = autoPreview?.lineItems.filter(l => l.unit === 'nos') ?? []

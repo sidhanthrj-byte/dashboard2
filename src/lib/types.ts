@@ -1,4 +1,10 @@
-export type PriceTier = 'dealer' | 'msp' | 'specifiors'
+export type PriceTier = 'dealer' | 'msp' | 'specifiors' | 'manual'
+
+export interface ManualRates {
+  fabricPerSqm: number
+  ledPerMtr: number
+  gripperPerRmt: number
+}
 export type ShapeType = 'rectangle' | 'circle' | 'triangle' | 'l-shape'
 export type UnitSystem = 'mm' | 'feet' | 'meters'
 export type LightType = 'none' | 'single_color' | 'single_color_dimmable' | 'tunable' | 'tunable_dali' | 'rgb' | 'rgbw'
@@ -54,6 +60,7 @@ export interface Quote {
   transportCost: number
   includeGst: boolean
   displayMode: QuoteDisplayMode
+  manualRates?: ManualRates
   notes: string
   createdAt: string
   updatedAt: string

@@ -1,6 +1,6 @@
 import type {
   CeilingItem, PriceTier, FabricDetail, FabricPanel, LEDDetail,
-  LineItem, ItemBreakdown, QuoteBreakdown, Quote,
+  LineItem, ItemBreakdown, QuoteBreakdown, Quote, ManualRates,
   TwoDims, CircleDims, TriangleDims,
 } from './types'
 import {
@@ -245,11 +245,12 @@ const STD_TW_DRIVERS = [
   { key: '450W', modules: 28 },
   { key: '200W', modules: 13 },
 ]
-// Single colour uses 80% of driver capacity: 600W→36, 450W→27, 200W→12
+/// Single colour uses 95% of driver capacity: 600W→57, 450W→42, 200W→18 (modules = floor(watts*0.95/13))
+// 600W*0.95=570W → floor(570/13)=43 modules; using rounded practical values: 600W→43, 450W→32, 200W→14
 const STD_SC_DRIVERS = [
-  { key: '600W', modules: 36 },
-  { key: '450W', modules: 27 },
-  { key: '200W', modules: 12 },
+  { key: '600W', modules: 43 },
+  { key: '450W', modules: 32 },
+  { key: '200W', modules: 14 },
 ]
 
 // Greedily pack modules into fewest drivers, using largest first
@@ -354,30 +355,34 @@ function buildDriverLines(totalModules: number, lightType: string, tier: PriceTi
   return items
 }
 
-export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: number): ItemBreakdown {
+export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: number, manualRates?: ManualRates): ItemBreakdown {
   const geo = getGeometry(item)
   const { widthM, lengthM, areaM2, perimeterM } = geo
   const lineItems: LineItem[] = []
 
+  // When tier is 'manual', use manualRates for fabric/led/gripper; fall back to dealer for other items
+  const effectiveTier: PriceTier = tier === 'manual' ? 'dealer' : tier
+
   // Fabric — pass raw dimensions so computeFabricDetail can pick orientation by joint type
   const fabricDetail = computeFabricDetail(geo.dim1M, geo.dim2M, item)
   const fabPrice = FABRIC[item.fabricType] ?? FABRIC['Descor Premium']
+  const fabRate = tier === 'manual' && manualRates ? manualRates.fabricPerSqm : p(fabPrice, effectiveTier)
   lineItems.push({
     description: `${item.fabricType} Fabric [${fabricDetail.panels[0]?.orientation ?? ''}, waste ${fabricDetail.totalWastageArea.toFixed(2)} sqm]`,
     qty: round2(fabricDetail.totalBilledArea),
     unit: 'sqm',
-    dealerRate: fabPrice.dealer, tierRate: p(fabPrice, tier),
+    dealerRate: fabPrice.dealer, tierRate: fabRate,
     dealerAmount: round2(fabricDetail.totalBilledArea * fabPrice.dealer),
-    tierAmount:   round2(fabricDetail.totalBilledArea * p(fabPrice, tier)),
+    tierAmount:   round2(fabricDetail.totalBilledArea * fabRate),
   })
 
   if (item.withPrinting) {
     lineItems.push({
       description: 'Printing Charges',
       qty: round2(areaM2), unit: 'sqm',
-      dealerRate: PRINTING.dealer, tierRate: p(PRINTING, tier),
+      dealerRate: PRINTING.dealer, tierRate: p(PRINTING, effectiveTier),
       dealerAmount: round2(areaM2 * PRINTING.dealer),
-      tierAmount:   round2(areaM2 * p(PRINTING, tier)),
+      tierAmount:   round2(areaM2 * p(PRINTING, effectiveTier)),
     })
   }
 
@@ -385,9 +390,9 @@ export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: 
     lineItems.push({
       description: 'Felt Pad / Fleece',
       qty: round2(areaM2), unit: 'sqm',
-      dealerRate: FLEECE.dealer, tierRate: p(FLEECE, tier),
+      dealerRate: FLEECE.dealer, tierRate: p(FLEECE, effectiveTier),
       dealerAmount: round2(areaM2 * FLEECE.dealer),
-      tierAmount:   round2(areaM2 * p(FLEECE, tier)),
+      tierAmount:   round2(areaM2 * p(FLEECE, effectiveTier)),
     })
   }
 
@@ -408,12 +413,13 @@ export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: 
     gripDesc = `${item.gripperType} Gripper`
   }
   const gripPrice = GRIPPER[item.gripperType] ?? GRIPPER['CW']
+  const gripRate = tier === 'manual' && manualRates ? manualRates.gripperPerRmt : p(gripPrice, effectiveTier)
   lineItems.push({
     description: gripDesc,
     qty: round2(gripQty), unit: 'rmt',
-    dealerRate: gripPrice.dealer, tierRate: p(gripPrice, tier),
+    dealerRate: gripPrice.dealer, tierRate: gripRate,
     dealerAmount: round2(gripQty * gripPrice.dealer),
-    tierAmount:   round2(gripQty * p(gripPrice, tier)),
+    tierAmount:   round2(gripQty * gripRate),
   })
 
   // LED
@@ -437,15 +443,16 @@ export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: 
 
     const lKey = ledKey(item)
     const ledPrice = LED[lKey]
+    const ledRate = tier === 'manual' && manualRates ? manualRates.ledPerMtr : p(ledPrice, effectiveTier)
     lineItems.push({
       description: `LED ${lKey} [${stripCount} strips × ${runningLengthM.toFixed(2)}m · ${LED_WATTS_PER_M}W/m = ${totalWatts}W total]`,
       qty: totalRunningMeters, unit: 'mtr',
-      dealerRate: ledPrice.dealer, tierRate: p(ledPrice, tier),
+      dealerRate: ledPrice.dealer, tierRate: ledRate,
       dealerAmount: round2(totalRunningMeters * ledPrice.dealer),
-      tierAmount:   round2(totalRunningMeters * p(ledPrice, tier)),
+      tierAmount:   round2(totalRunningMeters * ledRate),
     })
 
-    const driverLines = buildDriverLines(totalRunningMeters, item.lightType, tier, item.daliDriver)
+    const driverLines = buildDriverLines(totalRunningMeters, item.lightType, effectiveTier, item.daliDriver)
     // Apply manual overrides (user can reduce qty)
     const overrides = item.driverOverrides ?? {}
     for (const dl of driverLines) {
@@ -489,7 +496,7 @@ export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: 
 export function calculateQuote(quote: Quote): QuoteBreakdown {
   const tier = quote.priceTier
   const rate = quote.installationRatePerSqft ?? INSTALLATION_RATE_PER_SQFT
-  const itemBreakdowns = quote.items.map(item => calculateItem(item, tier, rate))
+  const itemBreakdowns = quote.items.map(item => calculateItem(item, tier, rate, quote.manualRates))
 
   const materialsTotalDealer = round2(itemBreakdowns.reduce((s, b) => s + b.subtotalDealer, 0))
   const materialsTotalTier   = round2(itemBreakdowns.reduce((s, b) => s + b.subtotalTier,   0))

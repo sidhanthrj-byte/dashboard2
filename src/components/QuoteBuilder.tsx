@@ -5,7 +5,7 @@ import { Plus, Save, Loader2, CheckCircle, BookUser, Trash2 } from 'lucide-react
 import { v4 as uuid } from 'uuid'
 import { useRouter } from 'next/navigation'
 import CeilingItemForm, { defaultItem } from './CeilingItemForm'
-import type { Quote, CeilingItem, PriceTier, QuoteDisplayMode } from '@/lib/types'
+import type { Quote, CeilingItem, PriceTier, QuoteDisplayMode, ManualRates } from '@/lib/types'
 import { calculateQuote, fmtINR } from '@/lib/calculations'
 import { listClients, saveClient, deleteClient, type SavedClient } from '@/lib/clients'
 
@@ -38,6 +38,10 @@ export default function QuoteBuilder({ initial, mode }: Props) {
     displayMode: (initial?.displayMode ?? 'total') as QuoteDisplayMode,
     notes: initial?.notes ?? '',
   })
+
+  const [manualRates, setManualRates] = useState<ManualRates>(
+    initial?.manualRates ?? { fabricPerSqm: 0, ledPerMtr: 0, gripperPerRmt: 0 }
+  )
 
   const [items, setItems] = useState<CeilingItem[]>(
     initial?.items?.length ? initial.items : [defaultItem(uuid())]
@@ -92,12 +96,13 @@ export default function QuoteBuilder({ initial, mode }: Props) {
         id: '', quoteNumber: '', createdAt: '', updatedAt: '',
         ...meta,
         items,
+        manualRates: meta.priceTier === 'manual' ? manualRates : undefined,
       }
       setPreview(calculateQuote(fakeQuote))
     } catch {
       setPreview(null)
     }
-  }, [meta, items])
+  }, [meta, items, manualRates])
 
   useEffect(() => { updatePreview() }, [updatePreview])
 
@@ -118,7 +123,7 @@ export default function QuoteBuilder({ initial, mode }: Props) {
     if (items.length === 0) { alert('Please add at least one ceiling item.'); return }
 
     setSaving(true)
-    const payload = { ...meta, items }
+    const payload = { ...meta, items, manualRates: meta.priceTier === 'manual' ? manualRates : undefined }
     const url = mode === 'edit' ? `/api/quotes/${initial!.id}` : '/api/quotes'
     const method = mode === 'edit' ? 'PUT' : 'POST'
     const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
@@ -132,6 +137,7 @@ export default function QuoteBuilder({ initial, mode }: Props) {
     { value: 'dealer', label: 'Dealer', desc: 'Dealer pricing' },
     { value: 'msp', label: 'MSP', desc: 'Market selling price' },
     { value: 'specifiors', label: 'Specifiors', desc: 'Architects / Specifiers' },
+    { value: 'manual', label: 'Manual', desc: 'Set custom rates' },
   ]
 
   return (
@@ -227,7 +233,7 @@ export default function QuoteBuilder({ initial, mode }: Props) {
             <span className="w-5 h-5 rounded-full bg-slate-800 text-white text-xs font-bold flex items-center justify-center">2</span>
             Pricing
           </h2>
-          <div className="grid grid-cols-3 gap-3 mb-4">
+          <div className="grid grid-cols-4 gap-3 mb-4">
             {TIER_OPTIONS.map(t => (
               <button
                 key={t.value} type="button"
@@ -245,6 +251,41 @@ export default function QuoteBuilder({ initial, mode }: Props) {
               </button>
             ))}
           </div>
+          {meta.priceTier === 'manual' && (
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl mb-4 space-y-3">
+              <p className="text-xs font-semibold text-amber-900">Manual Rates — set your own price per unit</p>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="label text-amber-800">Fabric (₹/sqm)</label>
+                  <input
+                    type="number" min="0" step="10" className="input"
+                    placeholder="e.g. 1100"
+                    value={manualRates.fabricPerSqm || ''}
+                    onChange={e => setManualRates(r => ({ ...r, fabricPerSqm: parseFloat(e.target.value) || 0 }))}
+                  />
+                </div>
+                <div>
+                  <label className="label text-amber-800">LED (₹/mtr)</label>
+                  <input
+                    type="number" min="0" step="10" className="input"
+                    placeholder="e.g. 350"
+                    value={manualRates.ledPerMtr || ''}
+                    onChange={e => setManualRates(r => ({ ...r, ledPerMtr: parseFloat(e.target.value) || 0 }))}
+                  />
+                </div>
+                <div>
+                  <label className="label text-amber-800">Gripper (₹/rmt)</label>
+                  <input
+                    type="number" min="0" step="5" className="input"
+                    placeholder="e.g. 170"
+                    value={manualRates.gripperPerRmt || ''}
+                    onChange={e => setManualRates(r => ({ ...r, gripperPerRmt: parseFloat(e.target.value) || 0 }))}
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-amber-700">Drivers, controls, printing &amp; fleece use dealer rates.</p>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
               <label className="label">Additional Markup (%)</label>
@@ -311,6 +352,7 @@ export default function QuoteBuilder({ initial, mode }: Props) {
                 index={idx}
                 priceTier={meta.priceTier}
                 installRatePerSqft={meta.installationRatePerSqft}
+                manualRates={meta.priceTier === 'manual' ? manualRates : undefined}
                 onChange={updated => updateItem(idx, updated)}
                 onRemove={() => removeItem(idx)}
               />
