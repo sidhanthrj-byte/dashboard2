@@ -40,6 +40,7 @@ export function defaultItem(id: string): CeilingItem {
     jointType: 'none',
     jointPosition: 0,
     ledSpacingMM: 125,
+    daliDriver: 'dt8',
     notes: '',
   }
 }
@@ -424,6 +425,24 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
                   ))}
                 </div>
               </div>
+              {item.lightType === 'tunable_dali' && (
+                <div>
+                  <label className="label">DALI Driver Type</label>
+                  <div className="flex gap-2">
+                    {([['dt8', 'DT8 150W'], ['da4m', 'DA4m']] as const).map(([val, label]) => (
+                      <button key={val} type="button"
+                        onClick={() => set('daliDriver', val)}
+                        className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all ${
+                          (item.daliDriver ?? 'dt8') === val
+                            ? 'border-slate-700 bg-slate-800 text-white'
+                            : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                        }`}
+                      >{label}</button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">Max 10 modules per driver · DA4m at 1 per 3 DT8</p>
+                </div>
+              )}
               <div className="max-w-[160px]">
                 <label className="label">Strip Gap (mm)</label>
                 <input

@@ -237,7 +237,7 @@ function ledKey(item: CeilingItem): string {
 }
 
 // Module-count limits per driver type (per Pongs LED Module & Driver Guide)
-const DALI_TW_MOD_PER_DRV  = 9   // DT8 150W  — tunable white DALI
+const DALI_TW_MOD_PER_DRV  = 10  // DT8 150W / DA4m — tunable white DALI (max 10 modules)
 const DALI_SC_MOD_PER_DRV  = 13  // DT2 200W  — single colour DALI dimmable
 
 // Standard driver module capacities (module count, not watt-based)
@@ -271,20 +271,25 @@ function addCtrl(key: string, qty: number, tier: PriceTier): LineItem {
   return { description: key, qty, unit: 'nos', dealerRate: pr.dealer, tierRate: p(pr, tier), dealerAmount: qty * pr.dealer, tierAmount: qty * p(pr, tier) }
 }
 
-function buildDriverLines(totalModules: number, lightType: string, tier: PriceTier): LineItem[] {
+function buildDriverLines(totalModules: number, lightType: string, tier: PriceTier, daliDriver?: 'dt8' | 'da4m'): LineItem[] {
   const items: LineItem[] = []
 
   if (lightType === 'tunable_dali') {
-    // DT8 150W — max 9 tunable modules per driver + DA4m at 1 per 3 drivers
     const drvCount = Math.ceil(totalModules / DALI_TW_MOD_PER_DRV)
     const da4mCount = Math.ceil(drvCount / 3)
-    items.push({
-      description: `DT8 150W Driver [max 9 modules each]`,
-      qty: drvCount, unit: 'nos',
-      dealerRate: DT8_150W.price.dealer, tierRate: p(DT8_150W.price, tier),
-      dealerAmount: drvCount * DT8_150W.price.dealer, tierAmount: drvCount * p(DT8_150W.price, tier),
-    })
-    items.push(addCtrl('DA4m', da4mCount, tier))
+    if (daliDriver === 'da4m') {
+      // DA4m as primary driver (max 10 modules each) + no separate DT8
+      items.push(addCtrl('DA4m', drvCount, tier))
+    } else {
+      // DT8 150W as primary driver + DA4m at 1 per 3 DT8
+      items.push({
+        description: `DT8 150W Driver [max 10 modules each]`,
+        qty: drvCount, unit: 'nos',
+        dealerRate: DT8_150W.price.dealer, tierRate: p(DT8_150W.price, tier),
+        dealerAmount: drvCount * DT8_150W.price.dealer, tierAmount: drvCount * p(DT8_150W.price, tier),
+      })
+      items.push(addCtrl('DA4m', da4mCount, tier))
+    }
 
   } else if (lightType === 'single_color_dimmable') {
     // DT2 200W (DALI dimmable) — max 13 single colour modules per driver + DA4m at 1 per 3 drivers
@@ -446,7 +451,7 @@ export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: 
       tierAmount:   round2(totalRunningMeters * p(ledPrice, tier)),
     })
 
-    lineItems.push(...buildDriverLines(totalRunningMeters, item.lightType, tier))
+    lineItems.push(...buildDriverLines(totalRunningMeters, item.lightType, tier, item.daliDriver))
   }
 
   const subtotalDealer = lineItems.reduce((s, l) => s + l.dealerAmount, 0)

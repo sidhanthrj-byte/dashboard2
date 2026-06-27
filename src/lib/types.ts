@@ -32,6 +32,7 @@ export interface CeilingItem {
   jointType: JointType
   jointPosition: number
   ledSpacingMM: number  // strip-to-strip gap in mm; default 125
+  daliDriver: 'dt8' | 'da4m'  // DALI tunable only: which driver type
   notes: string
 }
 
