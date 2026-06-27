@@ -360,11 +360,42 @@ export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: 
   const { widthM, lengthM, areaM2, perimeterM } = geo
   const lineItems: LineItem[] = []
 
-  // When tier is 'manual', use manualRates for fabric/led/gripper; fall back to dealer for other items
-  const effectiveTier: PriceTier = tier === 'manual' ? 'dealer' : tier
+  // When tier is 'manual', use manualRates for fabric/led/gripper; use chosen tier for other items
+  const effectiveTier: PriceTier = tier === 'manual'
+    ? (manualRates?.otherItemsTier ?? 'dealer')
+    : tier
 
-  // Fabric — pass raw dimensions so computeFabricDetail can pick orientation by joint type
-  const fabricDetail = computeFabricDetail(geo.dim1M, geo.dim2M, item)
+  // Fabric
+  let fabricDetail: FabricDetail
+  if (item.shape === 'circle') {
+    // Circles: bill as piece (no roll-width factor), 200mm per side margin on both dimensions
+    const D = geo.dim1M
+    const pieceW = Math.ceil(D * 10) / 10          // round up to nearest 0.1m
+    const pieceL = round2(D + 0.4)                  // diameter + 200mm each end
+    const billedArea = round2(pieceW * pieceL)
+    const usedArea = round2(Math.PI * (D / 2) ** 2) // actual circle area
+    const wastageArea = round2(billedArea - usedArea)
+    fabricDetail = {
+      panels: [{
+        rollWidth: pieceW,
+        physicalWidth: pieceW,
+        cutLength: pieceL,
+        panelArea: billedArea,
+        usedArea,
+        wastageArea,
+        wastagePercent: round2((wastageArea / billedArea) * 100),
+        orientation: `${pieceW}m × ${pieceL.toFixed(2)}m piece (200mm margin)`,
+        isJoint: false,
+      }],
+      totalBilledArea: billedArea,
+      totalUsedArea: usedArea,
+      totalWastageArea: wastageArea,
+      hasJoint: false,
+      jointPosition: '',
+    }
+  } else {
+    fabricDetail = computeFabricDetail(geo.dim1M, geo.dim2M, item)
+  }
   const fabPrice = FABRIC[item.fabricType] ?? FABRIC['Descor Premium']
   const fabRate = tier === 'manual' && manualRates ? manualRates.fabricPerSqm : p(fabPrice, effectiveTier)
   lineItems.push({

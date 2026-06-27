@@ -40,7 +40,7 @@ export default function QuoteBuilder({ initial, mode }: Props) {
   })
 
   const [manualRates, setManualRates] = useState<ManualRates>(
-    initial?.manualRates ?? { fabricPerSqm: 0, ledPerMtr: 0, gripperPerRmt: 0 }
+    initial?.manualRates ?? { fabricPerSqm: 0, ledPerMtr: 0, gripperPerRmt: 0, otherItemsTier: 'msp' }
   )
 
   const [items, setItems] = useState<CeilingItem[]>(
@@ -283,7 +283,23 @@ export default function QuoteBuilder({ initial, mode }: Props) {
                   />
                 </div>
               </div>
-              <p className="text-xs text-amber-700">Drivers, controls, printing &amp; fleece use dealer rates.</p>
+              <div>
+                <label className="label text-amber-800 mb-1">Drivers, Controls, Printing &amp; Fleece — use pricing tier</label>
+                <div className="flex gap-2">
+                  {(['dealer', 'msp', 'specifiors'] as const).map(t => (
+                    <button key={t} type="button"
+                      onClick={() => setManualRates(r => ({ ...r, otherItemsTier: t }))}
+                      className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
+                        manualRates.otherItemsTier === t
+                          ? 'border-amber-700 bg-amber-700 text-white'
+                          : 'border-amber-300 bg-white text-amber-800 hover:border-amber-500'
+                      }`}
+                    >
+                      {t.charAt(0).toUpperCase() + t.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
           <div className="grid grid-cols-2 gap-4 mb-4">

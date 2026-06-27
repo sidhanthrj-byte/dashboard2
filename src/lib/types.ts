@@ -4,6 +4,7 @@ export interface ManualRates {
   fabricPerSqm: number
   ledPerMtr: number
   gripperPerRmt: number
+  otherItemsTier: 'dealer' | 'msp' | 'specifiors'
 }
 export type ShapeType = 'rectangle' | 'circle' | 'triangle' | 'l-shape'
 export type UnitSystem = 'mm' | 'feet' | 'meters'
