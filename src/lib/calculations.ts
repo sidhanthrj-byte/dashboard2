@@ -45,7 +45,8 @@ function makePanel(
   isJoint: boolean,
 ): FabricPanel {
   const roll = bestRollForWidth(rollAxisM) ?? 5 // 5m fallback for edge cases
-  const panelArea = round2(roll * cutLengthM)
+  const billedCut = roundUpHalf(cutLengthM)     // round cut up to nearest 0.5m for billing
+  const panelArea = round2(roll * billedCut)
   const usedArea = round2(rollAxisM * cutLengthM)
   const wastageArea = round2(panelArea - usedArea)
   const wastagePercent = panelArea > 0 ? round2((wastageArea / panelArea) * 100) : 0
@@ -57,7 +58,7 @@ function makePanel(
     usedArea,
     wastageArea,
     wastagePercent,
-    orientation: `${roll}m roll × ${cutLengthM.toFixed(2)}m cut`,
+    orientation: `${roll}m roll × ${billedCut}m cut (actual ${cutLengthM.toFixed(2)}m)`,
     isJoint,
   }
 }
@@ -402,20 +403,27 @@ export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: 
     })
   }
 
-  // Gripper — each panel (fabric box) needs its own perimeter
+  // Gripper — each panel (fabric box) needs its own perimeter, dims rounded up to 0.5m
   let gripQty: number
   let gripDesc: string
   if (fabricDetail.hasJoint && fabricDetail.panels.length > 1) {
-    // Sum perimeters of all physical panels: 2*(physicalWidth + cutLength) per panel
+    // Sum perimeters of all physical panels, rounding each dim up to nearest 0.5m
     gripQty = round2(
-      fabricDetail.panels.reduce((s, p) => s + 2 * (p.physicalWidth + p.cutLength), 0)
+      fabricDetail.panels.reduce((s, p) => {
+        const rw = roundUpHalf(p.physicalWidth)
+        const rc = roundUpHalf(p.cutLength)
+        return s + 2 * (rw + rc)
+      }, 0)
     )
     const panelDescs = fabricDetail.panels.map((p, i) =>
-      `P${i+1}: 2×(${p.physicalWidth.toFixed(2)}+${p.cutLength.toFixed(2)})m`
+      `P${i+1}: 2×(${roundUpHalf(p.physicalWidth)}+${roundUpHalf(p.cutLength)})m`
     ).join(', ')
     gripDesc = `${item.gripperType} Gripper (${panelDescs})`
   } else {
-    gripQty = Math.ceil(perimeterM * 10) / 10
+    // Round each room dimension up to nearest 0.5m, then compute perimeter
+    const rd1 = roundUpHalf(geo.dim1M)
+    const rd2 = roundUpHalf(geo.dim2M)
+    gripQty = round2(2 * (rd1 + rd2))
     gripDesc = `${item.gripperType} Gripper`
   }
   const gripPrice = GRIPPER[item.gripperType] ?? GRIPPER['CW']
@@ -522,6 +530,11 @@ export function calculateQuote(quote: Quote): QuoteBreakdown {
 
 export function round2(n: number): number {
   return Math.round(n * 100) / 100
+}
+
+// Round up to nearest 0.5m — used for billing cut lengths and gripper perimeter
+function roundUpHalf(m: number): number {
+  return Math.ceil(m * 2) / 2
 }
 
 export function fmtINR(n: number): string {
