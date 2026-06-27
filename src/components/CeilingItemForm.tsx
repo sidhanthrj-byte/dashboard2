@@ -41,6 +41,7 @@ export function defaultItem(id: string): CeilingItem {
     jointPosition: 0,
     ledSpacingMM: 125,
     daliDriver: 'dt8',
+    driverOverrides: {},
     notes: '',
   }
 }
@@ -479,6 +480,72 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
                   : ''
                 return (
                   <p>• Gripper: {gripperQty.toFixed(2)} rmt {item.gripperType}{jointNote}</p>
+                )
+              })()}
+              {/* Drivers & Controls with manual override */}
+              {(() => {
+                const driverItems = preview.lineItems.filter(l => l.unit === 'nos')
+                if (!driverItems.length) return null
+                // We need the "auto-calculated" qty before overrides — re-derive from overrides map
+                // The preview already has overrides applied, so we read calculated qty from a fresh preview without overrides
+                const autoPreview = (() => {
+                  try {
+                    return calculateItem({ ...item, driverOverrides: {} }, priceTier, installRatePerSqft)
+                  } catch { return null }
+                })()
+                const autoItems = autoPreview?.lineItems.filter(l => l.unit === 'nos') ?? []
+                return (
+                  <div className="mt-2 pt-2 border-t border-indigo-200">
+                    <p className="font-semibold text-indigo-900 mb-1.5">Drivers &amp; Controls <span className="font-normal text-indigo-600">(edit qty to reduce)</span></p>
+                    <div className="space-y-1.5">
+                      {autoItems.map((auto, i) => {
+                        const overrideVal = (item.driverOverrides ?? {})[auto.description]
+                        const displayQty = overrideVal !== undefined ? overrideVal : auto.qty
+                        const isOverridden = overrideVal !== undefined && overrideVal < auto.qty
+                        return (
+                          <div key={i} className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              min={0}
+                              max={auto.qty}
+                              value={displayQty}
+                              onChange={e => {
+                                const v = parseInt(e.target.value)
+                                const newOv = { ...(item.driverOverrides ?? {}) }
+                                if (!isNaN(v) && v >= 0 && v < auto.qty) {
+                                  newOv[auto.description] = v
+                                } else {
+                                  delete newOv[auto.description]
+                                }
+                                onChange({ ...item, driverOverrides: newOv })
+                              }}
+                              className="w-14 px-1.5 py-0.5 rounded border border-indigo-300 bg-white text-indigo-900 text-center text-xs"
+                            />
+                            <span className={isOverridden ? 'line-through text-indigo-400' : ''}>
+                              {isOverridden ? `${auto.qty}` : ''}{isOverridden ? '' : '×'}
+                            </span>
+                            <span className={isOverridden ? 'text-indigo-400' : ''}>
+                              {auto.description.replace(/ \[.*?\]/, '')}
+                            </span>
+                            {isOverridden && (
+                              <>
+                                <span className="text-indigo-700">→ {displayQty} ×</span>
+                                <button
+                                  type="button"
+                                  className="text-indigo-500 underline ml-1"
+                                  onClick={() => {
+                                    const newOv = { ...(item.driverOverrides ?? {}) }
+                                    delete newOv[auto.description]
+                                    onChange({ ...item, driverOverrides: newOv })
+                                  }}
+                                >reset</button>
+                              </>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
                 )
               })()}
               <p className="font-semibold pt-1">Item subtotal: {fmtINR(preview.subtotalFinal)} + {fmtINR(preview.installationCost)} install</p>

@@ -443,7 +443,18 @@ export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: 
       tierAmount:   round2(totalRunningMeters * p(ledPrice, tier)),
     })
 
-    lineItems.push(...buildDriverLines(totalRunningMeters, item.lightType, tier, item.daliDriver))
+    const driverLines = buildDriverLines(totalRunningMeters, item.lightType, tier, item.daliDriver)
+    // Apply manual overrides (user can reduce qty)
+    const overrides = item.driverOverrides ?? {}
+    for (const dl of driverLines) {
+      const ov = overrides[dl.description]
+      if (ov !== undefined && ov >= 0 && ov < dl.qty) {
+        dl.qty = ov
+        dl.dealerAmount = round2(ov * dl.dealerRate)
+        dl.tierAmount = round2(ov * dl.tierRate)
+      }
+    }
+    lineItems.push(...driverLines)
   }
 
   const subtotalDealer = lineItems.reduce((s, l) => s + l.dealerAmount, 0)
