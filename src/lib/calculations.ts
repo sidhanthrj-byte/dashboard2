@@ -236,134 +236,114 @@ function ledKey(item: CeilingItem): string {
   return item.ledWidth === 'wider' ? 'Wider Single Colour' : 'Single Colour'
 }
 
-function buildDriverLines(
-  totalWatts: number,
-  lightType: string,
-  tier: PriceTier,
-  runningMeters: number,
-): LineItem[] {
+// Module-count limits per driver type (per Pongs LED Module & Driver Guide)
+const DALI_TW_MOD_PER_DRV  = 9   // DT8 150W  — tunable white DALI
+const DALI_SC_MOD_PER_DRV  = 13  // DT2 200W  — single colour DALI dimmable
+
+// Standard driver module capacities (module count, not watt-based)
+const STD_TW_DRIVERS = [
+  { key: '600W', modules: 38 },
+  { key: '450W', modules: 28 },
+  { key: '200W', modules: 13 },
+]
+// Single colour uses 80% of driver capacity: 600W→36, 450W→27, 200W→12
+const STD_SC_DRIVERS = [
+  { key: '600W', modules: 36 },
+  { key: '450W', modules: 27 },
+  { key: '200W', modules: 12 },
+]
+
+// Greedily pack modules into fewest drivers, using largest first
+function packDrivers(totalModules: number, specs: { key: string; modules: number }[]): Record<string, number> {
+  const sorted = [...specs].sort((a, b) => b.modules - a.modules)
+  const counts: Record<string, number> = {}
+  let rem = totalModules
+  while (rem > 0) {
+    const fit = sorted.find(s => s.modules >= rem)
+    if (fit) { counts[fit.key] = (counts[fit.key] || 0) + 1; rem = 0 }
+    else { counts[sorted[0].key] = (counts[sorted[0].key] || 0) + 1; rem -= sorted[0].modules }
+  }
+  return counts
+}
+
+function addCtrl(key: string, qty: number, tier: PriceTier): LineItem {
+  const pr = CONTROLS[key]
+  return { description: key, qty, unit: 'nos', dealerRate: pr.dealer, tierRate: p(pr, tier), dealerAmount: qty * pr.dealer, tierAmount: qty * p(pr, tier) }
+}
+
+function buildDriverLines(totalModules: number, lightType: string, tier: PriceTier): LineItem[] {
   const items: LineItem[] = []
-  const required = totalWatts * 1.2
 
   if (lightType === 'tunable_dali') {
-    // DALI at site: DT8 150W + DA4m
-    const count = Math.ceil(required / DT8_150W.watts)
+    // DT8 150W — max 9 tunable modules per driver; no separate controls needed
+    const count = Math.ceil(totalModules / DALI_TW_MOD_PER_DRV)
     items.push({
-      description: 'DT8 150W Driver (DALI at site)',
+      description: `DT8 150W Driver [max 9 modules each]`,
       qty: count, unit: 'nos',
-      dealerRate: DT8_150W.price.dealer,
-      tierRate: p(DT8_150W.price, tier),
-      dealerAmount: count * DT8_150W.price.dealer,
-      tierAmount: count * p(DT8_150W.price, tier),
+      dealerRate: DT8_150W.price.dealer, tierRate: p(DT8_150W.price, tier),
+      dealerAmount: count * DT8_150W.price.dealer, tierAmount: count * p(DT8_150W.price, tier),
     })
-    const da4m = CONTROLS['DA4m']
-    items.push({
-      description: 'DA4m DALI Controller',
-      qty: count, unit: 'nos',
-      dealerRate: da4m.dealer, tierRate: p(da4m, tier),
-      dealerAmount: count * da4m.dealer, tierAmount: count * p(da4m, tier),
-    })
-    items.push(...controlAndRemote('tunable', tier))
-  } else if (lightType === 'tunable') {
-    // Standard tunable: standard drivers + Power Repeater SC + Controller Tunable
-    const sorted = Object.entries(STANDARD_DRIVERS).sort((a, b) => a[1].watts - b[1].watts)
-    const counts: Record<string, number> = {}
-    let rem = required
-    while (rem > 0) {
-      const fit = sorted.find(([, s]) => s.watts >= rem)
-      if (fit) { counts[fit[0]] = (counts[fit[0]] || 0) + 1; rem = 0 }
-      else { const lg = sorted[sorted.length - 1]; counts[lg[0]] = (counts[lg[0]] || 0) + 1; rem -= lg[1].watts }
-    }
-    for (const [name, qty] of Object.entries(counts)) {
-      const spec = STANDARD_DRIVERS[name]
-      items.push({
-        description: `${name} Driver`,
-        qty, unit: 'nos',
-        dealerRate: spec.price.dealer, tierRate: p(spec.price, tier),
-        dealerAmount: qty * spec.price.dealer, tierAmount: qty * p(spec.price, tier),
-      })
-    }
-    // Power Repeater Single Colour for tunable (per spec)
-    const rep = CONTROLS['Power Repeater Single Colour']
-    items.push({
-      description: 'Power Repeater Single Colour',
-      qty: 1, unit: 'nos',
-      dealerRate: rep.dealer, tierRate: p(rep, tier),
-      dealerAmount: rep.dealer, tierAmount: p(rep, tier),
-    })
-    items.push(...controlAndRemote('tunable', tier))
+
   } else if (lightType === 'single_color_dimmable') {
-    const count = Math.ceil(required / DALI2_DRIVE_200W.watts)
+    // DT2 200W (DALI dimmable) — max 13 single colour modules per driver
+    const count = Math.ceil(totalModules / DALI_SC_MOD_PER_DRV)
     items.push({
-      description: 'DALI 2 Drive 200W (Dimmable)',
+      description: `DT2 200W Driver [max 13 modules each]`,
       qty: count, unit: 'nos',
-      dealerRate: DALI2_DRIVE_200W.price.dealer,
-      tierRate: p(DALI2_DRIVE_200W.price, tier),
-      dealerAmount: count * DALI2_DRIVE_200W.price.dealer,
-      tierAmount: count * p(DALI2_DRIVE_200W.price, tier),
+      dealerRate: DALI2_DRIVE_200W.price.dealer, tierRate: p(DALI2_DRIVE_200W.price, tier),
+      dealerAmount: count * DALI2_DRIVE_200W.price.dealer, tierAmount: count * p(DALI2_DRIVE_200W.price, tier),
     })
-    const da4m = CONTROLS['DA4m']
-    items.push({
-      description: 'DA4m DALI Controller',
-      qty: count, unit: 'nos',
-      dealerRate: da4m.dealer, tierRate: p(da4m, tier),
-      dealerAmount: count * da4m.dealer, tierAmount: count * p(da4m, tier),
-    })
-    items.push(...controlAndRemote('single', tier))
-  } else {
-    // Single colour / RGB / RGBW — standard CV drivers
-    const sorted = Object.entries(STANDARD_DRIVERS).sort((a, b) => a[1].watts - b[1].watts)
-    const counts: Record<string, number> = {}
-    let rem = required
-    while (rem > 0) {
-      const fit = sorted.find(([, s]) => s.watts >= rem)
-      if (fit) { counts[fit[0]] = (counts[fit[0]] || 0) + 1; rem = 0 }
-      else { const lg = sorted[sorted.length - 1]; counts[lg[0]] = (counts[lg[0]] || 0) + 1; rem -= lg[1].watts }
-    }
-    for (const [name, qty] of Object.entries(counts)) {
+
+  } else if (lightType === 'tunable') {
+    // Standard Tunable White — 200W/450W/600W + EV2 + V2 Controller + RT2 Remote
+    const drvCounts = packDrivers(totalModules, STD_TW_DRIVERS)
+    for (const [name, qty] of Object.entries(drvCounts)) {
       const spec = STANDARD_DRIVERS[name]
       items.push({
-        description: `${name} Driver`,
+        description: `${name} Driver (Tunable White)`,
         qty, unit: 'nos',
         dealerRate: spec.price.dealer, tierRate: p(spec.price, tier),
         dealerAmount: qty * spec.price.dealer, tierAmount: qty * p(spec.price, tier),
       })
     }
-    if (lightType === 'rgb' || lightType === 'rgbw') {
-      items.push(...controlAndRemote('tunable', tier))
-    } else if (lightType === 'single_color') {
-      // Power repeater for long runs
-      if (runningMeters > 20) {
-        const rep = CONTROLS['Power Repeater Single Colour']
-        items.push({
-          description: 'Power Repeater Single Colour',
-          qty: 1, unit: 'nos',
-          dealerRate: rep.dealer, tierRate: p(rep, tier),
-          dealerAmount: rep.dealer, tierAmount: p(rep, tier),
-        })
-      }
+    items.push(addCtrl('EV2 Power Repeater', 1, tier))
+    items.push(addCtrl('V2 Controller', 1, tier))
+    items.push(addCtrl('RT2 Remote', 1, tier))
+
+  } else if (lightType === 'single_color') {
+    // Single Colour — 200W/450W/600W @ 80% capacity + EV1 + V1 + RT1
+    const drvCounts = packDrivers(totalModules, STD_SC_DRIVERS)
+    const totalDrivers = Object.values(drvCounts).reduce((a, b) => a + b, 0)
+    for (const [name, qty] of Object.entries(drvCounts)) {
+      const spec = STANDARD_DRIVERS[name]
+      items.push({
+        description: `${name} Driver (Single Colour)`,
+        qty, unit: 'nos',
+        dealerRate: spec.price.dealer, tierRate: p(spec.price, tier),
+        dealerAmount: qty * spec.price.dealer, tierAmount: qty * p(spec.price, tier),
+      })
     }
+    items.push(addCtrl('EV1 Power Repeater', totalDrivers, tier))
+    items.push(addCtrl('V1 Controller', 1, tier))
+    items.push(addCtrl('RT1 Remote', 1, tier))
+
+  } else if (lightType === 'rgb' || lightType === 'rgbw') {
+    // RGB / RGBW — watt-based with 1.2 safety factor using 600W drivers
+    const totalWatts = totalModules * LED_WATTS_PER_M
+    const required = totalWatts * 1.2
+    const count = Math.ceil(required / STANDARD_DRIVERS['600W'].watts)
+    const spec = STANDARD_DRIVERS['600W']
+    items.push({
+      description: '600W Driver (RGB/RGBW)',
+      qty: count, unit: 'nos',
+      dealerRate: spec.price.dealer, tierRate: p(spec.price, tier),
+      dealerAmount: count * spec.price.dealer, tierAmount: count * p(spec.price, tier),
+    })
+    items.push(addCtrl('V2 Controller', 1, tier))
+    items.push(addCtrl('RT2 Remote', 1, tier))
   }
 
   return items
-}
-
-function controlAndRemote(type: 'single' | 'tunable', tier: PriceTier): LineItem[] {
-  const ctrlKey = type === 'single' ? 'Controller Single Colour' : 'Controller Tunable/RGB'
-  const remKey  = type === 'single' ? 'Remote Single Colour'     : 'Remote Tunable/RGB'
-  const ctrl = CONTROLS[ctrlKey], rem = CONTROLS[remKey]
-  return [
-    {
-      description: ctrlKey, qty: 1, unit: 'nos',
-      dealerRate: ctrl.dealer, tierRate: p(ctrl, tier),
-      dealerAmount: ctrl.dealer, tierAmount: p(ctrl, tier),
-    },
-    {
-      description: remKey, qty: 1, unit: 'nos',
-      dealerRate: rem.dealer, tierRate: p(rem, tier),
-      dealerAmount: rem.dealer, tierAmount: p(rem, tier),
-    },
-  ]
 }
 
 export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: number): ItemBreakdown {
@@ -462,7 +442,7 @@ export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: 
       tierAmount:   round2(totalRunningMeters * p(ledPrice, tier)),
     })
 
-    lineItems.push(...buildDriverLines(totalWatts, item.lightType, tier, totalRunningMeters))
+    lineItems.push(...buildDriverLines(totalRunningMeters, item.lightType, tier))
   }
 
   const subtotalDealer = lineItems.reduce((s, l) => s + l.dealerAmount, 0)

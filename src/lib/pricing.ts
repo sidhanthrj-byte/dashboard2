@@ -37,21 +37,18 @@ export const LED: Record<string, Price> = {
   'Wider Tunable':       { dealer: 370, msp: 470, specifiors: 425 },
 }
 
-// 1 metre = 12 LED dots, 1 dot = 1W → 12W per metre for all strip types
-export const LED_WATTS_PER_M = 12
+// 1 LED module = 1000mm = 13W (tunable: 16 dots, single colour: 10 dots)
+export const LED_WATTS_PER_M = 13
 
 export const INSTALLATION_RATE_PER_SQFT = 120  // ₹ per sqft
 export const SQFT_PER_SQM = 10.7639
 
 export interface DriverSpec { watts: number; price: Price }
 
+// Standard drivers used for tunable white, standard dimmable, and single colour
 export const STANDARD_DRIVERS: Record<string, DriverSpec> = {
-  '50W':  { watts: 50,  price: { dealer: 1000, msp: 1500, specifiors: 1300 } },
-  '100W': { watts: 100, price: { dealer: 1200, msp: 1900, specifiors: 1800 } },
-  '150W': { watts: 150, price: { dealer: 1500, msp: 2200, specifiors: 1900 } },
   '200W': { watts: 200, price: { dealer: 1900, msp: 2500, specifiors: 2000 } },
-  '350W': { watts: 350, price: { dealer: 2100, msp: 2900, specifiors: 2800 } },
-  '400W': { watts: 400, price: { dealer: 3200, msp: 4700, specifiors: 3700 } },
+  '450W': { watts: 450, price: { dealer: 3200, msp: 4500, specifiors: 3800 } }, // confirm price
   '600W': { watts: 600, price: { dealer: 4700, msp: 5500, specifiors: 5000 } },
 }
 
@@ -71,13 +68,14 @@ export const XLG_200I: DriverSpec = {
 }
 
 export const CONTROLS: Record<string, Price> = {
-  'DA4m':                        { dealer: 1800, msp: 2300, specifiors: 2100 },
-  'Controller Single Colour':    { dealer: 1300, msp: 1600, specifiors: 1500 },
-  'Controller Tunable/RGB':      { dealer: 1500, msp: 1900, specifiors: 1700 },
-  'Remote Single Colour':        { dealer: 1600, msp: 2000, specifiors: 1800 },
-  'Remote Tunable/RGB':          { dealer: 1700, msp: 2100, specifiors: 1900 },
-  'Power Repeater Single Colour':{ dealer: 1700, msp: 2000, specifiors: 1900 },
-  'Power Repeater Tunable/RGB':  { dealer: 1800, msp: 2100, specifiors: 2000 },
+  // Single Colour system
+  'EV1 Power Repeater':  { dealer: 1700, msp: 2000, specifiors: 1900 },
+  'V1 Controller':       { dealer: 1300, msp: 1600, specifiors: 1500 },
+  'RT1 Remote':          { dealer: 1600, msp: 2000, specifiors: 1800 },
+  // Standard Tunable / Standard Dimmable system
+  'EV2 Power Repeater':  { dealer: 1800, msp: 2100, specifiors: 2000 },
+  'V2 Controller':       { dealer: 1500, msp: 1900, specifiors: 1700 },
+  'RT2 Remote':          { dealer: 1700, msp: 2100, specifiors: 1900 },
 }
 
 export const FLEECE: Price = { dealer: 500, msp: 1000, specifiors: 700 }
