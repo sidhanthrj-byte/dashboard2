@@ -88,7 +88,7 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
           <div className="bg-blue-50 rounded-xl p-4">
             <p className="text-xs text-blue-600 mb-1">Installation</p>
             <p className="text-xl font-bold text-blue-700">{fmtINR(bd.totalInstallation)}</p>
-            <p className="text-xs text-blue-400">₹{quote.installationRatePerSqft ?? 60}/sqft</p>
+            <p className="text-xs text-blue-400">₹{quote.installationRatePerSqft ?? 120}/sqft</p>
           </div>
           <div className="bg-slate-800 rounded-xl p-4">
             <p className="text-xs text-slate-400 mb-1">Grand Total</p>
@@ -112,7 +112,7 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
 
       {/* Item breakdowns */}
       {bd.itemBreakdowns.map((itemBd, idx) => (
-        <ItemBreakdownCard key={itemBd.item.id} bd={itemBd} index={idx} installRate={quote.installationRatePerSqft ?? 60} />
+        <ItemBreakdownCard key={itemBd.item.id} bd={itemBd} index={idx} installRate={quote.installationRatePerSqft ?? 120} />
       ))}
 
       {/* Footer totals */}
@@ -133,7 +133,7 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
             <tr className="border-b border-slate-100">
               <td className="py-2 text-blue-600 font-medium">
                 Installation
-                <span className="text-xs text-slate-400 font-normal ml-1">(₹{quote.installationRatePerSqft ?? 60}/sqft on actual area)</span>
+                <span className="text-xs text-slate-400 font-normal ml-1">(₹{quote.installationRatePerSqft ?? 120}/sqft on actual area)</span>
               </td>
               <td className="py-2 text-right font-semibold text-blue-700">{fmtINR(bd.totalInstallation)}</td>
             </tr>
