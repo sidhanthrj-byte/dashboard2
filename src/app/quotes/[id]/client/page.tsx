@@ -445,105 +445,26 @@ export default async function ClientPage({ params }: { params: { id: string } })
         {/* ══════════════════════════════
             PAGE 4 — WHY CHOOSE PONGS
         ══════════════════════════════ */}
-        <div className="quote-pdf-page print:shadow-none" style={{ backgroundColor: '#F5F4F2', minHeight: '1123px', position: 'relative' }}>
-
-          {/* Header */}
-          <div style={{ backgroundColor: '#111', padding: '14px 60px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <p style={{ fontSize: '9px', color: 'rgba(255,255,255,0.4)', letterSpacing: '0.12em', fontWeight: 600 }}>
-              PONGS INDIA &nbsp;·&nbsp; Stretch Ceiling Systems
-            </p>
-            <div>
-              <span style={{ fontSize: '15px', fontWeight: 900, color: 'white', letterSpacing: '-0.02em' }}>PONGS</span>
-              <span style={{ fontSize: '7px', fontWeight: 700, color: 'rgba(255,255,255,0.4)', letterSpacing: '0.35em', marginLeft: '4px' }}>INDIA</span>
-            </div>
-          </div>
-
-          <div style={{ padding: '44px 60px 0', display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <p style={{ fontSize: '10px', color: '#999', letterSpacing: '0.18em', fontWeight: 600, whiteSpace: 'nowrap' }}>ABOUT US</p>
-            <div style={{ flex: 1, height: '1px', backgroundColor: '#D0CEC8' }} />
-          </div>
-
-          <div style={{ textAlign: 'center', padding: '36px 60px 0' }}>
-            <p style={{ fontSize: '28px', fontWeight: 400, color: '#111', letterSpacing: '0.01em', margin: 0 }}>
-              WHY CHOOSE <strong style={{ fontWeight: 900 }}>PONGS?</strong>
-            </p>
-            <p style={{ fontSize: '11px', color: '#888', marginTop: '8px' }}>
-              Premium stretch ceiling solutions trusted by architects, designers &amp; developers across India.
-            </p>
-          </div>
-
-          {/* Circular arrangement */}
-          <div style={{ position: 'relative', width: '560px', height: '540px', margin: '24px auto 0' }}>
-
-            {/* Ring */}
-            <div style={{
-              position: 'absolute',
-              left: `${CX - CR}px`, top: `${CY - CR}px`,
-              width: `${CR * 2}px`, height: `${CR * 2}px`,
-              borderRadius: '50%', border: '1px solid #C0BBB2',
-            }} />
-
-            {/* Center PONGS text */}
-            <div style={{
-              position: 'absolute',
-              left: `${CX}px`, top: `${CY}px`,
-              transform: 'translate(-50%, -50%)',
-              textAlign: 'center',
-            }}>
-              <p style={{ fontSize: '22px', fontWeight: 900, color: '#111', letterSpacing: '-0.02em', lineHeight: 1 }}>PONGS</p>
-              <p style={{ fontSize: '7px', fontWeight: 700, color: '#999', letterSpacing: '0.35em', marginTop: '4px' }}>INDIA</p>
-            </div>
-
-            {/* Circle items */}
-            {circleItems.map((item, i) => {
-              const d = item.deg
-              const isRight  = d > -60  && d < 60
-              const isLeft   = d > 120  || d < -120
-              const isBottom = d >= 60  && d <= 120
-
-              const labelStyle: React.CSSProperties = {
-                position: 'absolute',
-                whiteSpace: 'pre-line',
-                fontSize: '9px',
-                fontWeight: 600,
-                color: '#333',
-                lineHeight: 1.4,
-                width: '88px',
-                ...(isRight  ? { left: '64px',  top: '-10px', textAlign: 'left' as const }  : {}),
-                ...(isLeft   ? { right: '64px', top: '-10px', textAlign: 'right' as const } : {}),
-                ...(isBottom ? { left: '-20px', top: '58px',  textAlign: 'center' as const } : {}),
-                ...(!isRight && !isLeft && !isBottom ? { left: '-20px', bottom: '58px', top: 'auto', textAlign: 'center' as const } : {}),
-              }
-
-              return (
-                <div key={i} style={{ position: 'absolute', left: `${item.x - 26}px`, top: `${item.y - 26}px` }}>
-                  <div style={{
-                    width: '52px', height: '52px', borderRadius: '50%',
-                    backgroundColor: '#111',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}>
-                    <span style={{ fontSize: '8.5px', fontWeight: 800, color: 'white', letterSpacing: '0.05em' }}>{item.icon}</span>
-                  </div>
-                  <div style={labelStyle}>{item.label}</div>
-                </div>
-              )
-            })}
-          </div>
-
-          {/* Bottom */}
+        <div className="quote-pdf-page print:shadow-none" style={{ backgroundColor: '#F5F4F2', minHeight: '1123px', position: 'relative', display: 'flex', flexDirection: 'column' }}>
+          {/* Use the original Pongs "Why Choose" graphic as full page */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/why-pongs.jpg"
+            alt="Why Choose PONGS?"
+            style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top', display: 'block', flex: 1 }}
+          />
+          {/* Footer strip */}
           <div style={{
-            position: 'absolute', bottom: '36px', left: '60px', right: '60px',
-            display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end',
-            borderTop: '1px solid #D0CEC8', paddingTop: '16px',
+            padding: '14px 60px',
+            borderTop: '1px solid #D0CEC8',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            backgroundColor: '#F5F4F2',
           }}>
             <div>
               <p style={{ fontSize: '10px', color: '#888' }}>Sidharth Trading Co. &nbsp;·&nbsp; Bengaluru, Karnataka</p>
               <p style={{ fontSize: '9px', color: '#aaa', marginTop: '2px' }}>Authorised PONGS Partner</p>
             </div>
-            <div style={{ textAlign: 'right' }}>
-              <p style={{ fontSize: '20px', fontWeight: 900, color: '#111', letterSpacing: '-0.02em', lineHeight: 1 }}>PONGS</p>
-              <p style={{ fontSize: '7px', fontWeight: 700, color: '#888', letterSpacing: '0.35em', marginTop: '3px' }}>INDIA</p>
-            </div>
+            <p style={{ fontSize: '9px', color: '#aaa', letterSpacing: '0.1em' }}>{quote.quoteNumber}</p>
           </div>
         </div>
 
