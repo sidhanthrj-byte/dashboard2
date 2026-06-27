@@ -68,6 +68,8 @@ export const XLG_200I: DriverSpec = {
 }
 
 export const CONTROLS: Record<string, Price> = {
+  // DALI controller (1 per 3 DALI drivers)
+  'DA4m':                { dealer: 1800, msp: 2300, specifiors: 2100 },
   // Single Colour system
   'EV1 Power Repeater':  { dealer: 1700, msp: 2000, specifiors: 1900 },
   'V1 Controller':       { dealer: 1300, msp: 1600, specifiors: 1500 },

@@ -275,24 +275,28 @@ function buildDriverLines(totalModules: number, lightType: string, tier: PriceTi
   const items: LineItem[] = []
 
   if (lightType === 'tunable_dali') {
-    // DT8 150W — max 9 tunable modules per driver; no separate controls needed
-    const count = Math.ceil(totalModules / DALI_TW_MOD_PER_DRV)
+    // DT8 150W — max 9 tunable modules per driver + DA4m at 1 per 3 drivers
+    const drvCount = Math.ceil(totalModules / DALI_TW_MOD_PER_DRV)
+    const da4mCount = Math.ceil(drvCount / 3)
     items.push({
       description: `DT8 150W Driver [max 9 modules each]`,
-      qty: count, unit: 'nos',
+      qty: drvCount, unit: 'nos',
       dealerRate: DT8_150W.price.dealer, tierRate: p(DT8_150W.price, tier),
-      dealerAmount: count * DT8_150W.price.dealer, tierAmount: count * p(DT8_150W.price, tier),
+      dealerAmount: drvCount * DT8_150W.price.dealer, tierAmount: drvCount * p(DT8_150W.price, tier),
     })
+    items.push(addCtrl('DA4m', da4mCount, tier))
 
   } else if (lightType === 'single_color_dimmable') {
-    // DT2 200W (DALI dimmable) — max 13 single colour modules per driver
-    const count = Math.ceil(totalModules / DALI_SC_MOD_PER_DRV)
+    // DT2 200W (DALI dimmable) — max 13 single colour modules per driver + DA4m at 1 per 3 drivers
+    const drvCount = Math.ceil(totalModules / DALI_SC_MOD_PER_DRV)
+    const da4mCount = Math.ceil(drvCount / 3)
     items.push({
       description: `DT2 200W Driver [max 13 modules each]`,
-      qty: count, unit: 'nos',
+      qty: drvCount, unit: 'nos',
       dealerRate: DALI2_DRIVE_200W.price.dealer, tierRate: p(DALI2_DRIVE_200W.price, tier),
-      dealerAmount: count * DALI2_DRIVE_200W.price.dealer, tierAmount: count * p(DALI2_DRIVE_200W.price, tier),
+      dealerAmount: drvCount * DALI2_DRIVE_200W.price.dealer, tierAmount: drvCount * p(DALI2_DRIVE_200W.price, tier),
     })
+    items.push(addCtrl('DA4m', da4mCount, tier))
 
   } else if (lightType === 'tunable') {
     // Standard Tunable White — 200W/450W/600W + EV2 + V2 Controller + RT2 Remote
