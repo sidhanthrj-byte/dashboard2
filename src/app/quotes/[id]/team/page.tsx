@@ -224,12 +224,29 @@ function ItemBreakdownCard({ bd, index, installRate }: { bd: ItemBreakdown; inde
       {bd.ledDetail && (
         <div className="px-6 py-3 bg-slate-50 border-b border-slate-100 text-xs text-slate-600 flex flex-wrap gap-4">
           <span><strong>Cove depth:</strong> {item.lightDepth}"</span>
+          <span><strong>Strip gap:</strong> {item.ledSpacingMM ?? 125}mm</span>
           <span><strong>Strips:</strong> {bd.ledDetail.stripCount}</span>
           <span><strong>Strip length:</strong> {bd.ledDetail.runningLengthM.toFixed(2)}m</span>
           <span><strong>Total LED:</strong> {bd.ledDetail.totalRunningMeters} mtr running</span>
           <span><strong>Load:</strong> {bd.ledDetail.totalWatts}W</span>
         </div>
       )}
+
+      {/* Driver & Controls detail */}
+      {bd.ledDetail && (() => {
+        const driverItems = bd.lineItems.filter(l => l.unit === 'nos')
+        if (!driverItems.length) return null
+        return (
+          <div className="px-6 py-3 bg-amber-50 border-b border-amber-100 text-xs text-amber-800">
+            <span className="font-semibold mr-3">Drivers & Controls:</span>
+            <span className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
+              {driverItems.map((l, i) => (
+                <span key={i}><strong>{l.qty} × {l.description.replace(/ \[.*\]/, '')}</strong></span>
+              ))}
+            </span>
+          </div>
+        )
+      })()}
 
       {/* Line items */}
       <div className="overflow-x-auto">
