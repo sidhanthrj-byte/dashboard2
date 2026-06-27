@@ -40,7 +40,7 @@ export const LED: Record<string, Price> = {
 // 1 metre = 12 LED dots, 1 dot = 1W → 12W per metre for all strip types
 export const LED_WATTS_PER_M = 12
 
-export const INSTALLATION_RATE_PER_SQFT = 60   // ₹ per sqft
+export const INSTALLATION_RATE_PER_SQFT = 120  // ₹ per sqft
 export const SQFT_PER_SQM = 10.7639
 
 export interface DriverSpec { watts: number; price: Price }

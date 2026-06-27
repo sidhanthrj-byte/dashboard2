@@ -32,7 +32,7 @@ export default function QuoteBuilder({ initial, mode }: Props) {
     validUntil: initial?.validUntil ?? validUntil,
     priceTier: (initial?.priceTier ?? 'msp') as PriceTier,
     markupPercent: initial?.markupPercent ?? 0,
-    installationRatePerSqft: initial?.installationRatePerSqft ?? 60,
+    installationRatePerSqft: initial?.installationRatePerSqft ?? 120,
     transportCost: initial?.transportCost ?? 0,
     includeGst: initial?.includeGst ?? false,
     displayMode: (initial?.displayMode ?? 'total') as QuoteDisplayMode,

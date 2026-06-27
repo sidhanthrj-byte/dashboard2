@@ -26,7 +26,7 @@ export async function initQuotesTable() {
       valid_until TEXT,
       price_tier TEXT NOT NULL DEFAULT 'msp',
       markup_percent REAL DEFAULT 0,
-      installation_rate REAL DEFAULT 60,
+      installation_rate REAL DEFAULT 120,
       transport_cost REAL DEFAULT 0,
       include_gst INTEGER DEFAULT 0,
       display_mode TEXT DEFAULT 'total',
@@ -46,6 +46,8 @@ export async function initQuotesTable() {
   } catch {
     // Column already exists — ignore
   }
+  // Migrate: bump any quotes still using the old ₹60 default to ₹120
+  await db.execute(`UPDATE pongs_quotes SET installation_rate = 120 WHERE installation_rate = 60`)
 }
 
 export async function dbListQuotes(): Promise<Quote[]> {
@@ -80,7 +82,7 @@ export async function dbSaveQuote(quote: Record<string, unknown>) {
     (quote.validUntil as string) ?? null,
     String(quote.priceTier ?? 'msp'),
     Number(quote.markupPercent ?? 0),
-    Number(quote.installationRatePerSqft ?? quote.installationRate ?? 60),
+    Number(quote.installationRatePerSqft ?? quote.installationRate ?? 120),
     Number(quote.transportCost ?? 0),
     quote.includeGst ? 1 : 0,
     String(quote.displayMode ?? 'total'),
