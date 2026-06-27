@@ -31,6 +31,7 @@ export interface CeilingItem {
   quantity: number
   jointType: JointType
   jointPosition: number
+  ledSpacingMM: number  // strip-to-strip gap in mm; default 125
   notes: string
 }
 

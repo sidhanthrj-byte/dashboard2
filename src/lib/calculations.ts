@@ -430,13 +430,16 @@ export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: 
   // LED
   let ledDetail: LEDDetail | null = null
   if (item.lightType !== 'none') {
-    const depthIn = item.lightDepth ?? 6
-    const stripSpacingInches = depthIn  // spacing between strips = depth
-    const spacingMM = depthIn * 25.4    // convert inches to mm
-    // strips = ceil(width / spacing) + 1  (one extra for safety, matches Pongs practice)
-    const widthMM = widthM * 1000
-    const stripCount = Math.ceil(widthMM / spacingMM) + 1
-    const runningLengthM = lengthM
+    // Strips are counted across the SHORTER dimension, run along the LONGER dimension.
+    // This is correct regardless of how the fabric is oriented.
+    const ledShortM = Math.min(geo.dim1M, geo.dim2M)
+    const ledLongM  = Math.max(geo.dim1M, geo.dim2M)
+    const spacingMM = item.ledSpacingMM ?? 125   // default 125mm gap between strips
+    const stripSpacingInches = round2(spacingMM / 25.4)
+    // strips = ceil(shorter_dim / spacing) + 1  (one extra, matches Pongs practice)
+    const stripCount = Math.ceil((ledShortM * 1000) / spacingMM) + 1
+    // Each strip runs the full long dimension, rounded UP to nearest 1m LED module
+    const runningLengthM = Math.ceil(ledLongM * 1000 / 1000)  // = ceil(mm/1000) metres
     const totalRunningMeters = round2(stripCount * runningLengthM)
     const totalWatts = round2(totalRunningMeters * LED_WATTS_PER_M)
     ledDetail = { stripCount, runningLengthM, totalRunningMeters, totalWatts, stripSpacingInches }

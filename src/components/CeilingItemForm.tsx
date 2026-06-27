@@ -39,6 +39,7 @@ export function defaultItem(id: string): CeilingItem {
     quantity: 1,
     jointType: 'none',
     jointPosition: 0,
+    ledSpacingMM: 125,
     notes: '',
   }
 }
@@ -422,6 +423,15 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
                     </button>
                   ))}
                 </div>
+              </div>
+              <div className="max-w-[160px]">
+                <label className="label">Strip Gap (mm)</label>
+                <input
+                  type="number" min="50" max="500" step="5" className="input"
+                  value={item.ledSpacingMM ?? 125}
+                  onChange={e => set('ledSpacingMM', parseFloat(e.target.value) || 125)}
+                />
+                <p className="text-xs text-slate-500 mt-1">Gap between LED strips (default 125mm)</p>
               </div>
             </div>
           )}
