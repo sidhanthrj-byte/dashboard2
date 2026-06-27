@@ -426,7 +426,9 @@ export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: 
     const spacingMM = item.ledSpacingMM ?? 125   // default 125mm gap between strips
     const stripSpacingInches = round2(spacingMM / 25.4)
     // strips = ceil(shorter_dim / spacing) + 1  (one extra, matches Pongs practice)
-    const stripCount = Math.ceil((ledShortM * 1000) / spacingMM) + 1
+    // For circles, use 80% of the bounding-square strip count
+    const rawStripCount = Math.ceil((ledShortM * 1000) / spacingMM) + 1
+    const stripCount = item.shape === 'circle' ? Math.ceil(rawStripCount * 0.8) : rawStripCount
     // Each strip runs the full long dimension, rounded UP to nearest 1m LED module
     const runningLengthM = Math.ceil(ledLongM * 1000 / 1000)  // = ceil(mm/1000) metres
     const totalRunningMeters = round2(stripCount * runningLengthM)

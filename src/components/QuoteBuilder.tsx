@@ -408,10 +408,10 @@ export default function QuoteBuilder({ initial, mode }: Props) {
           <div className="card p-4 bg-slate-50 border-slate-200">
             <p className="text-xs font-semibold text-slate-700 mb-2">Smart Calculations</p>
             <ul className="text-xs text-slate-500 space-y-1">
-              <li>• Fabric cut length rounded up to nearest 0.5m for billing</li>
-              <li>• Gripper perimeter: each dimension rounded up to nearest 0.5m</li>
+              <li>• Fabric cut length and gripper perimeter use exact dimensions (no rounding)</li>
               <li>• Joint option available for all rectangle sizes</li>
               <li>• LED strips counted across shorter dim at chosen gap (default 125mm), length rounded up to nearest 1m module</li>
+              <li>• Circle: LED count = 80% of equivalent bounding square</li>
               <li>• DALI Tunable: DT8 150W max 10 modules + DA4m at 1 per 3 drivers</li>
               <li>• Standard Tunable/Dimmable: 200W/450W/600W drivers + EV2 + V2 + RT2</li>
               <li>• Single Colour: 80% driver capacity + EV1 + V1 + RT1</li>
