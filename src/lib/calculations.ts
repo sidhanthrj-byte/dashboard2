@@ -5,6 +5,7 @@ import type {
 } from './types'
 import {
   FABRIC, PRINTING, GRIPPER, LED, LED_WATTS_PER_M,
+  SC_WATTS_PER_M_STANDARD, SC_WATTS_PER_M_12DOT,
   STANDARD_DRIVERS, DALI2_DRIVE_200W, DT8_150W,
   CONTROLS, FLEECE, ROLL_WIDTHS, p,
   INSTALLATION_RATE_PER_SQFT, SQFT_PER_SQM,
@@ -276,17 +277,13 @@ function ledKey(item: CeilingItem): string {
 const DALI_TW_MOD_PER_DRV  = 10  // DT8 150W / DA4m — tunable white DALI (max 10 modules)
 const DALI_SC_MOD_PER_DRV  = 13  // DT2 200W  — single colour DALI dimmable
 
-// Standard driver module capacities at 85% load: floor(watts * 0.85 / 13)
-const STD_TW_DRIVERS = [
-  { key: '600W', modules: 39 },
-  { key: '450W', modules: 29 },
-  { key: '200W', modules: 13 },
-]
-const STD_SC_DRIVERS = [
-  { key: '600W', modules: 39 },
-  { key: '450W', modules: 29 },
-  { key: '200W', modules: 13 },
-]
+// Returns module capacity for each standard driver at 85% load given watts/module
+function makeDriverSpecs(wattsPerM: number): { key: string; modules: number }[] {
+  return Object.entries(STANDARD_DRIVERS)
+    .map(([key, spec]) => ({ key, modules: Math.floor(spec.watts * 0.85 / wattsPerM) }))
+    .filter(s => s.modules > 0)
+    .sort((a, b) => b.modules - a.modules)
+}
 
 // Greedily pack modules into fewest drivers, using largest first
 function packDrivers(totalModules: number, specs: { key: string; modules: number }[]): Record<string, number> {
@@ -306,17 +303,15 @@ function addCtrl(key: string, qty: number, tier: PriceTier): LineItem {
   return { description: key, qty, unit: 'nos', dealerRate: pr.dealer, tierRate: p(pr, tier), dealerAmount: qty * pr.dealer, tierAmount: qty * p(pr, tier) }
 }
 
-function buildDriverLines(totalModules: number, lightType: string, tier: PriceTier, daliDriver?: 'dt8' | 'da4m', preferredDriverWatt?: string): LineItem[] {
+function buildDriverLines(totalModules: number, lightType: string, tier: PriceTier, daliDriver?: 'dt8' | 'da4m', preferredDriverWatt?: string, ledModuleType?: string): LineItem[] {
   const items: LineItem[] = []
 
   if (lightType === 'tunable_dali') {
     const drvCount = Math.ceil(totalModules / DALI_TW_MOD_PER_DRV)
     const da4mCount = Math.ceil(drvCount / 3)
     if (daliDriver === 'da4m') {
-      // DA4m as primary driver (max 10 modules each) + no separate DT8
       items.push(addCtrl('DA4m', drvCount, tier))
     } else {
-      // DT8 150W as primary driver + DA4m at 1 per 3 DT8
       items.push({
         description: `DT8 150W Driver [max 10 modules each]`,
         qty: drvCount, unit: 'nos',
@@ -327,7 +322,6 @@ function buildDriverLines(totalModules: number, lightType: string, tier: PriceTi
     }
 
   } else if (lightType === 'single_color_dimmable') {
-    // DT2 200W (DALI dimmable) — max 13 single colour modules per driver + DA4m at 1 per 3 drivers
     const drvCount = Math.ceil(totalModules / DALI_SC_MOD_PER_DRV)
     const da4mCount = Math.ceil(drvCount / 3)
     items.push({
@@ -339,11 +333,13 @@ function buildDriverLines(totalModules: number, lightType: string, tier: PriceTi
     items.push(addCtrl('DA4m', da4mCount, tier))
 
   } else if (lightType === 'tunable') {
-    // Standard Tunable White — 200W/450W/600W + EV2 + V2 Controller + RT2 Remote
-    const forcedSpec = preferredDriverWatt ? STD_TW_DRIVERS.find(s => s.key === preferredDriverWatt) : null
+    // Standard Tunable White — all available driver sizes + EV2 (1 per driver) + V2 Controller (1 per 4 EV2) + RT2 Remote
+    const specs = makeDriverSpecs(LED_WATTS_PER_M)
+    const forcedSpec = preferredDriverWatt ? specs.find(s => s.key === preferredDriverWatt) : null
     const drvCounts = forcedSpec
       ? { [forcedSpec.key]: Math.ceil(totalModules / forcedSpec.modules) }
-      : packDrivers(totalModules, STD_TW_DRIVERS)
+      : packDrivers(totalModules, specs)
+    let totalDrivers = 0
     for (const [name, qty] of Object.entries(drvCounts)) {
       const spec = STANDARD_DRIVERS[name]
       items.push({
@@ -352,17 +348,22 @@ function buildDriverLines(totalModules: number, lightType: string, tier: PriceTi
         dealerRate: spec.price.dealer, tierRate: p(spec.price, tier),
         dealerAmount: qty * spec.price.dealer, tierAmount: qty * p(spec.price, tier),
       })
+      totalDrivers += qty
     }
-    items.push(addCtrl('EV2 Power Repeater', 1, tier))
-    items.push(addCtrl('V2 Controller', 1, tier))
+    const ev2Count = totalDrivers
+    const v2Count  = Math.max(1, Math.ceil(ev2Count / 4))
+    items.push(addCtrl('EV2 Power Repeater', ev2Count, tier))
+    items.push(addCtrl('V2 Controller', v2Count, tier))
     items.push(addCtrl('RT2 Remote', 1, tier))
 
   } else if (lightType === 'single_color') {
     // Single Colour — drivers only (no controller, remote, or power repeater)
-    const forcedSpec = preferredDriverWatt ? STD_SC_DRIVERS.find(s => s.key === preferredDriverWatt) : null
+    const scWatts = ledModuleType === '12dot' ? SC_WATTS_PER_M_12DOT : SC_WATTS_PER_M_STANDARD
+    const specs = makeDriverSpecs(scWatts)
+    const forcedSpec = preferredDriverWatt ? specs.find(s => s.key === preferredDriverWatt) : null
     const drvCounts = forcedSpec
       ? { [forcedSpec.key]: Math.ceil(totalModules / forcedSpec.modules) }
-      : packDrivers(totalModules, STD_SC_DRIVERS)
+      : packDrivers(totalModules, specs)
     for (const [name, qty] of Object.entries(drvCounts)) {
       const spec = STANDARD_DRIVERS[name]
       items.push({
@@ -374,7 +375,6 @@ function buildDriverLines(totalModules: number, lightType: string, tier: PriceTi
     }
 
   } else if (lightType === 'rgb' || lightType === 'rgbw') {
-    // RGB / RGBW — watt-based with 1.2 safety factor using 600W drivers
     const totalWatts = totalModules * LED_WATTS_PER_M
     const required = totalWatts * 1.2
     const count = Math.ceil(required / STANDARD_DRIVERS['600W'].watts)
@@ -512,21 +512,26 @@ export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: 
     // Each strip runs the full long dimension, rounded UP to nearest 1m LED module
     const runningLengthM = Math.ceil(ledLongM * 1000 / 1000)  // = ceil(mm/1000) metres
     const totalRunningMeters = round2(stripCount * runningLengthM)
-    const totalWatts = round2(totalRunningMeters * LED_WATTS_PER_M)
+    // Correct wattage per metre depending on light type
+    const isSC = item.lightType === 'single_color' || item.lightType === 'single_color_dimmable'
+    const wattsPerM = isSC
+      ? (item.ledModuleType === '12dot' ? SC_WATTS_PER_M_12DOT : SC_WATTS_PER_M_STANDARD)
+      : LED_WATTS_PER_M
+    const totalWatts = round2(totalRunningMeters * wattsPerM)
     ledDetail = { stripCount, runningLengthM, totalRunningMeters, totalWatts, stripSpacingInches }
 
     const lKey = ledKey(item)
     const ledPrice = LED[lKey]
     const ledRate = tier === 'manual' && manualRates ? manualRates.ledPerMtr : p(ledPrice, effectiveTier)
     lineItems.push({
-      description: `LED ${lKey} [${stripCount} strips × ${runningLengthM.toFixed(2)}m · ${LED_WATTS_PER_M}W/m = ${totalWatts}W total]`,
+      description: `LED ${lKey} [${stripCount} strips × ${runningLengthM.toFixed(2)}m · ${wattsPerM}W/m = ${totalWatts}W total]`,
       qty: totalRunningMeters, unit: 'mtr',
       dealerRate: ledPrice.dealer, tierRate: ledRate,
       dealerAmount: round2(totalRunningMeters * ledPrice.dealer),
       tierAmount:   round2(totalRunningMeters * ledRate),
     })
 
-    const driverLines = buildDriverLines(totalRunningMeters, item.lightType, effectiveTier, item.daliDriver, item.preferredDriverWatt)
+    const driverLines = buildDriverLines(totalRunningMeters, item.lightType, effectiveTier, item.daliDriver, item.preferredDriverWatt, item.ledModuleType)
     // Apply manual overrides — user can increase or decrease qty
     const overrides = item.driverOverrides ?? {}
     for (const dl of driverLines) {

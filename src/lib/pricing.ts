@@ -38,18 +38,25 @@ export const LED: Record<string, Price> = {
   'Wider Tunable':          { dealer: 370, msp: 470, specifiors: 425 },
 }
 
-// 1 LED module = 1000mm = 13W (tunable: 16 dots, single colour: 10 dots)
+// 1 LED module = 1000mm
+// Tunable/RGB: 13W/m  |  Single Colour standard (10 dot): 12.5W/m  |  12-dot: 15W/m
 export const LED_WATTS_PER_M = 13
+export const SC_WATTS_PER_M_STANDARD = 12.5
+export const SC_WATTS_PER_M_12DOT    = 15
 
 export const INSTALLATION_RATE_PER_SQFT = 120  // ₹ per sqft
 export const SQFT_PER_SQM = 10.7639
 
 export interface DriverSpec { watts: number; price: Price }
 
-// Standard drivers used for tunable white, standard dimmable, and single colour
+// Standard drivers — all sizes from price list
 export const STANDARD_DRIVERS: Record<string, DriverSpec> = {
+  '50W':  { watts:  50, price: { dealer: 1000, msp: 1500, specifiors: 1300 } },
+  '100W': { watts: 100, price: { dealer: 1200, msp: 1900, specifiors: 1800 } },
+  '150W': { watts: 150, price: { dealer: 1500, msp: 2200, specifiors: 1900 } },
   '200W': { watts: 200, price: { dealer: 1900, msp: 2500, specifiors: 2000 } },
-  '450W': { watts: 450, price: { dealer: 3200, msp: 4500, specifiors: 3800 } }, // confirm price
+  '350W': { watts: 350, price: { dealer: 2100, msp: 2900, specifiors: 2800 } },
+  '400W': { watts: 400, price: { dealer: 3200, msp: 4700, specifiors: 3700 } },
   '600W': { watts: 600, price: { dealer: 4700, msp: 5500, specifiors: 5000 } },
 }
 

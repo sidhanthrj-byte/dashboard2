@@ -492,9 +492,13 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
                   <div className="flex gap-2 flex-wrap">
                     {([
                       [undefined, 'Auto (best mix)'],
-                      ['600W', '600W · max 39 mod'],
-                      ['450W', '450W · max 29 mod'],
-                      ['200W', '200W · max 13 mod'],
+                      ['600W', '600W'],
+                      ['400W', '400W'],
+                      ['350W', '350W'],
+                      ['200W', '200W'],
+                      ['150W', '150W'],
+                      ['100W', '100W'],
+                      ['50W',  '50W'],
                     ] as const).map(([val, label]) => (
                       <button key={val ?? 'auto'} type="button"
                         onClick={() => onChange({ ...item, preferredDriverWatt: val, driverOverrides: {} })}
