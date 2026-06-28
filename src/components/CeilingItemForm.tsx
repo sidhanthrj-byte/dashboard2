@@ -169,9 +169,10 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
             <div>
               <label className="label">Quantity</label>
               <input
+                key={`qty-${item.id}`}
                 type="number" min={1} className="input"
-                value={item.quantity}
-                onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 1) set('quantity', v) }}
+                defaultValue={item.quantity}
+                onBlur={e => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 1) set('quantity', v); else e.target.value = String(item.quantity) }}
               />
             </div>
           </div>
