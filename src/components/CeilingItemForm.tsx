@@ -378,11 +378,13 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
             <div className="max-w-[220px]">
               <label className="label">Fabric Margin (mm per side)</label>
               <input
+                key={`margin-${item.id}`}
                 type="number" min="0" max="500" step="10" className="input"
-                value={item.marginMM ?? 0}
-                onChange={e => {
+                defaultValue={item.marginMM ?? 0}
+                onBlur={e => {
                   const v = parseInt(e.target.value)
                   set('marginMM', isNaN(v) || v < 0 ? 0 : v)
+                  if (isNaN(v)) e.target.value = String(item.marginMM ?? 0)
                 }}
               />
               <p className="text-xs text-slate-500 mt-1">
@@ -536,11 +538,13 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
               <div className="max-w-[160px]">
                 <label className="label">Strip Gap (mm)</label>
                 <input
+                  key={`spacing-${item.id}`}
                   type="number" min="50" max="500" step="5" className="input"
-                  value={item.ledSpacingMM ?? 125}
-                  onChange={e => {
+                  defaultValue={item.ledSpacingMM ?? 125}
+                  onBlur={e => {
                     const v = parseFloat(e.target.value)
                     if (!isNaN(v) && v > 0) set('ledSpacingMM', v)
+                    else e.target.value = String(item.ledSpacingMM ?? 125)
                   }}
                 />
                 <p className="text-xs text-slate-500 mt-1">
