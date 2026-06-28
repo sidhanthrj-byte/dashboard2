@@ -319,7 +319,7 @@ function buildDriverLines(totalModules: number, lightType: string, tier: PriceTi
     items.push(addCtrl('RT2 Remote', 1, tier))
 
   } else if (lightType === 'single_color') {
-    // Single Colour — 200W/450W/600W @ 80% capacity + EV1 + V1 + RT1
+    // Single Colour — drivers + EV1 Power Repeater (no controller/remote needed)
     const drvCounts = packDrivers(totalModules, STD_SC_DRIVERS)
     const totalDrivers = Object.values(drvCounts).reduce((a, b) => a + b, 0)
     for (const [name, qty] of Object.entries(drvCounts)) {
@@ -332,8 +332,6 @@ function buildDriverLines(totalModules: number, lightType: string, tier: PriceTi
       })
     }
     items.push(addCtrl('EV1 Power Repeater', totalDrivers, tier))
-    items.push(addCtrl('V1 Controller', 1, tier))
-    items.push(addCtrl('RT1 Remote', 1, tier))
 
   } else if (lightType === 'rgb' || lightType === 'rgbw') {
     // RGB / RGBW — watt-based with 1.2 safety factor using 600W drivers

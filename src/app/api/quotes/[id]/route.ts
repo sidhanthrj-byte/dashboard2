@@ -22,6 +22,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     // Bust the cache for all views of this quote
     revalidatePath(`/quotes/${params.id}/team`)
     revalidatePath(`/quotes/${params.id}/client`)
+    revalidatePath(`/quotes/${params.id}/internal`)
     revalidatePath('/')
     return NextResponse.json(updated)
   } catch (err) {

@@ -127,19 +127,34 @@ export default function QuoteBuilder({ initial, mode }: Props) {
     if (isInternal) setSavingInternal(true)
     else setSaving(true)
 
-    const payload = { ...meta, items, manualRates: meta.priceTier === 'manual' ? manualRates : undefined }
-    const url = mode === 'edit' ? `/api/quotes/${initial!.id}` : '/api/quotes'
-    const method = mode === 'edit' ? 'PUT' : 'POST'
-    const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-    const savedQ = await res.json()
-
-    if (isInternal) {
-      setSavingInternal(false)
-      router.push(`/quotes/${savedQ.id}/internal`)
-    } else {
-      setSaving(false)
-      setSaved(true)
-      setTimeout(() => router.push(`/quotes/${savedQ.id}/team`), 800)
+    try {
+      const payload = { ...meta, items, manualRates: meta.priceTier === 'manual' ? manualRates : undefined }
+      const url = mode === 'edit' ? `/api/quotes/${initial!.id}` : '/api/quotes'
+      const method = mode === 'edit' ? 'PUT' : 'POST'
+      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      if (!res.ok) {
+        const err = await res.text()
+        alert(`Save failed (${res.status}): ${err}`)
+        setSaving(false); setSavingInternal(false)
+        return
+      }
+      const savedQ = await res.json()
+      if (!savedQ?.id) {
+        alert('Save failed: unexpected server response')
+        setSaving(false); setSavingInternal(false)
+        return
+      }
+      if (isInternal) {
+        setSavingInternal(false)
+        router.push(`/quotes/${savedQ.id}/internal`)
+      } else {
+        setSaving(false)
+        setSaved(true)
+        setTimeout(() => router.push(`/quotes/${savedQ.id}/team`), 600)
+      }
+    } catch (e) {
+      alert(`Save error: ${e}`)
+      setSaving(false); setSavingInternal(false)
     }
   }
 

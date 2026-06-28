@@ -43,9 +43,10 @@ export async function initQuotesTable() {
   // Migrate: add status column if it doesn't exist yet
   try {
     await db.execute(`ALTER TABLE pongs_quotes ADD COLUMN status TEXT DEFAULT 'draft'`)
-  } catch {
-    // Column already exists — ignore
-  }
+  } catch { /* already exists */ }
+  try {
+    await db.execute(`ALTER TABLE pongs_quotes ADD COLUMN manual_rates_json TEXT`)
+  } catch { /* already exists */ }
   // Migrate: bump any quotes still using the old ₹60 default to ₹120
   await db.execute(`UPDATE pongs_quotes SET installation_rate = 120 WHERE installation_rate = 60`)
 }
@@ -94,12 +95,13 @@ export async function dbSaveQuote(quote: Record<string, unknown>) {
     String((quote.status as string) ?? 'draft'),
     String(quote.createdAt ?? now),
     now,
+    quote.manualRates ? JSON.stringify(quote.manualRates) : null,
   ]
   await db.execute(
     `INSERT INTO pongs_quotes (id, quote_number, client_name, project_name, location, date, valid_until,
       price_tier, markup_percent, installation_rate, transport_cost, include_gst, display_mode,
-      items_json, notes, grand_total, client_email, client_phone, status, created_at, updated_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      items_json, notes, grand_total, client_email, client_phone, status, created_at, updated_at, manual_rates_json)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       ON CONFLICT(id) DO UPDATE SET
         client_name=excluded.client_name, project_name=excluded.project_name,
         location=excluded.location, date=excluded.date, valid_until=excluded.valid_until,
@@ -108,7 +110,8 @@ export async function dbSaveQuote(quote: Record<string, unknown>) {
         include_gst=excluded.include_gst, display_mode=excluded.display_mode,
         items_json=excluded.items_json, notes=excluded.notes, grand_total=excluded.grand_total,
         client_email=excluded.client_email, client_phone=excluded.client_phone,
-        status=excluded.status, updated_at=excluded.updated_at`,
+        status=excluded.status, updated_at=excluded.updated_at,
+        manual_rates_json=excluded.manual_rates_json`,
     args,
   )
 }
@@ -155,5 +158,6 @@ function rowToQuote(row: any): Record<string, unknown> {
     status: row.status ?? 'draft',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    manualRates: row.manual_rates_json ? JSON.parse(row.manual_rates_json as string) : undefined,
   }
 }
