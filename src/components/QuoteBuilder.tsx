@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Save, Loader2, CheckCircle, BookUser, Trash2 } from 'lucide-react'
+import { Plus, Save, Loader2, BookUser, Trash2 } from 'lucide-react'
 import { v4 as uuid } from 'uuid'
 import { useRouter } from 'next/navigation'
 import CeilingItemForm, { defaultItem } from './CeilingItemForm'
@@ -17,7 +17,6 @@ interface Props {
 export default function QuoteBuilder({ initial, mode }: Props) {
   const router = useRouter()
   const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
   const [savingInternal, setSavingInternal] = useState(false)
 
   const today = new Date().toISOString().split('T')[0]
@@ -149,8 +148,7 @@ export default function QuoteBuilder({ initial, mode }: Props) {
         router.push(`/quotes/${savedQ.id}/internal`)
       } else {
         setSaving(false)
-        setSaved(true)
-        setTimeout(() => router.push(`/quotes/${savedQ.id}/team`), 600)
+        router.push(`/quotes/${savedQ.id}/team`)
       }
     } catch (e) {
       alert(`Save error: ${e}`)
@@ -470,15 +468,11 @@ export default function QuoteBuilder({ initial, mode }: Props) {
 
           <button
             onClick={handleSave}
-            disabled={saving || saved}
-            className={`w-full btn text-sm py-3 font-semibold justify-center ${
-              saved ? 'bg-emerald-500 text-white' : 'btn-primary'
-            }`}
+            disabled={saving}
+            className="w-full btn text-sm py-3 font-semibold justify-center btn-primary"
           >
             {saving ? (
               <><Loader2 size={16} className="animate-spin" /> Saving…</>
-            ) : saved ? (
-              <><CheckCircle size={16} /> Saved! Redirecting…</>
             ) : (
               <><Save size={16} /> {mode === 'edit' ? 'Update Quote' : 'Save Quote'}</>
             )}
