@@ -270,7 +270,7 @@ function addCtrl(key: string, qty: number, tier: PriceTier): LineItem {
   return { description: key, qty, unit: 'nos', dealerRate: pr.dealer, tierRate: p(pr, tier), dealerAmount: qty * pr.dealer, tierAmount: qty * p(pr, tier) }
 }
 
-function buildDriverLines(totalModules: number, lightType: string, tier: PriceTier, daliDriver?: 'dt8' | 'da4m'): LineItem[] {
+function buildDriverLines(totalModules: number, lightType: string, tier: PriceTier, daliDriver?: 'dt8' | 'da4m', preferredDriverWatt?: string): LineItem[] {
   const items: LineItem[] = []
 
   if (lightType === 'tunable_dali') {
@@ -304,7 +304,10 @@ function buildDriverLines(totalModules: number, lightType: string, tier: PriceTi
 
   } else if (lightType === 'tunable') {
     // Standard Tunable White — 200W/450W/600W + EV2 + V2 Controller + RT2 Remote
-    const drvCounts = packDrivers(totalModules, STD_TW_DRIVERS)
+    const forcedSpec = preferredDriverWatt ? STD_TW_DRIVERS.find(s => s.key === preferredDriverWatt) : null
+    const drvCounts = forcedSpec
+      ? { [forcedSpec.key]: Math.ceil(totalModules / forcedSpec.modules) }
+      : packDrivers(totalModules, STD_TW_DRIVERS)
     for (const [name, qty] of Object.entries(drvCounts)) {
       const spec = STANDARD_DRIVERS[name]
       items.push({
@@ -320,7 +323,10 @@ function buildDriverLines(totalModules: number, lightType: string, tier: PriceTi
 
   } else if (lightType === 'single_color') {
     // Single Colour — drivers only (no controller, remote, or power repeater)
-    const drvCounts = packDrivers(totalModules, STD_SC_DRIVERS)
+    const forcedSpec = preferredDriverWatt ? STD_SC_DRIVERS.find(s => s.key === preferredDriverWatt) : null
+    const drvCounts = forcedSpec
+      ? { [forcedSpec.key]: Math.ceil(totalModules / forcedSpec.modules) }
+      : packDrivers(totalModules, STD_SC_DRIVERS)
     for (const [name, qty] of Object.entries(drvCounts)) {
       const spec = STANDARD_DRIVERS[name]
       items.push({
@@ -480,7 +486,7 @@ export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: 
       tierAmount:   round2(totalRunningMeters * ledRate),
     })
 
-    const driverLines = buildDriverLines(totalRunningMeters, item.lightType, effectiveTier, item.daliDriver)
+    const driverLines = buildDriverLines(totalRunningMeters, item.lightType, effectiveTier, item.daliDriver, item.preferredDriverWatt)
     // Apply manual overrides — user can increase or decrease qty
     const overrides = item.driverOverrides ?? {}
     for (const dl of driverLines) {

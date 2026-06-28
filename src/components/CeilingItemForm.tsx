@@ -43,6 +43,7 @@ export function defaultItem(id: string): CeilingItem {
     ledModuleType: 'standard',
     daliDriver: 'dt8',
     driverOverrides: {},
+    preferredDriverWatt: undefined,
     printingRatePerSqm: undefined,
     notes: '',
   }
@@ -464,6 +465,29 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
                     ))}
                   </div>
                   <p className="text-xs text-slate-500 mt-1">Max 10 modules per driver · DA4m at 1 per 3 DT8</p>
+                </div>
+              )}
+              {(item.lightType === 'single_color' || item.lightType === 'tunable') && (
+                <div>
+                  <label className="label">Driver Size</label>
+                  <div className="flex gap-2 flex-wrap">
+                    {([
+                      [undefined, 'Auto (best mix)'],
+                      ['600W', '600W · max 39 mod'],
+                      ['450W', '450W · max 29 mod'],
+                      ['200W', '200W · max 13 mod'],
+                    ] as const).map(([val, label]) => (
+                      <button key={val ?? 'auto'} type="button"
+                        onClick={() => set('preferredDriverWatt', val)}
+                        className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
+                          (item.preferredDriverWatt ?? undefined) === val
+                            ? 'border-slate-700 bg-slate-800 text-white'
+                            : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                        }`}
+                      >{label}</button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">Auto picks fewest drivers using largest size first. Override to force a single size.</p>
                 </div>
               )}
               {/* 12-dot module option for single colour */}

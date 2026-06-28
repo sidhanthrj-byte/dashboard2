@@ -42,6 +42,7 @@ export interface CeilingItem {
   ledModuleType: 'standard' | '12dot'  // single colour only; 12dot = 12-dot/m module
   daliDriver: 'dt8' | 'da4m'  // DALI tunable only: which driver type
   driverOverrides: Record<string, number>  // qty overrides for driver/control line items (can increase or decrease)
+  preferredDriverWatt?: '200W' | '450W' | '600W'  // force a single driver size instead of auto-mix
   printingRatePerSqm?: number  // override standard printing rate
   notes: string
 }

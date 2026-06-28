@@ -108,7 +108,8 @@ export default async function ClientPage({ params }: { params: { id: string } })
       </div>
 
       {/* ── PDF Pages ── */}
-      <div id="quote-printable" className="max-w-[794px] mx-auto print:max-w-none" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
+      <div className="pdf-mobile-outer -mx-3 sm:mx-0 print:overflow-visible print:mx-0">
+      <div id="quote-printable" className="print:w-full" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
 
         {/* ══════════════════════════════
             PAGE 1 — COVER
@@ -471,6 +472,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
           </div>
         </div>
 
+      </div>
       </div>
     </div>
   )

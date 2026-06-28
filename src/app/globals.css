@@ -85,6 +85,15 @@ body {
 ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 99px; }
 ::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
 
+/* Mobile PDF viewer — horizontally scrollable with proportional scale hint */
+.pdf-mobile-outer {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.pdf-mobile-outer > #quote-printable {
+  width: 794px;
+}
+
 @media print {
   .no-print { display: none !important; }
   body { background: white; }
