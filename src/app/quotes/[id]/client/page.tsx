@@ -2,6 +2,7 @@ import { dbGetQuote } from "@/lib/db"
 export const dynamic = 'force-dynamic'
 import { notFound } from 'next/navigation'
 import { calculateQuote, fmtINR, formatDims, round2 } from '@/lib/calculations'
+const SQFT_PER_SQM = 10.7639
 import { Edit, Users } from 'lucide-react'
 import PrintButton from '@/components/PrintButton'
 import SharePDF from '@/components/SharePDF'
@@ -287,8 +288,8 @@ export default async function ClientPage({ params }: { params: { id: string } })
                     { h: 'Article No.', align: 'left' as const },
                     { h: 'Description', align: 'left' as const },
                     { h: 'HSN', align: 'center' as const },
-                    { h: 'Qty', align: 'right' as const },
-                    { h: 'Unit Price', align: 'right' as const },
+                    { h: quote.displayMode === 'per-sqft' ? 'Area (sqft)' : 'Qty', align: 'right' as const },
+                    { h: quote.displayMode === 'per-sqft' ? '₹ / sqft' : 'Unit Price', align: 'right' as const },
                     { h: 'Amount', align: 'right' as const },
                   ].map(({ h, align }) => (
                     <th key={h} style={{ padding: '9px 10px', textAlign: align, fontSize: '9px', fontWeight: 700, color: '#555', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
@@ -300,9 +301,13 @@ export default async function ClientPage({ params }: { params: { id: string } })
               <tbody>
                 {bd.itemBreakdowns.map((itemBd, idx) => {
                   const item = itemBd.item
+                  const isSqft = quote.displayMode === 'per-sqft'
                   // unit price = full cost for 1 unit (materials + installation)
                   const unitPrice = round2(itemBd.itemTotal / item.quantity)
                   const totalAmount = itemBd.itemTotal
+                  // sqft display
+                  const totalSqft = round2(itemBd.areaM2 * SQFT_PER_SQM * item.quantity)
+                  const pricePerSqft = totalSqft > 0 ? round2(totalAmount / totalSqft) : 0
                   return (
                     <tr key={item.id} style={{ borderBottom: '1px solid #F0F0F0', backgroundColor: idx % 2 === 1 ? '#FAFAFA' : 'white' }}>
                       <td style={{ padding: '11px 10px', verticalAlign: 'top', color: '#888', fontWeight: 600, fontSize: '10px', whiteSpace: 'nowrap' }}>
@@ -325,8 +330,12 @@ export default async function ClientPage({ params }: { params: { id: string } })
                         {item.notes        && <p style={{ color: '#bbb', fontSize: '10px', fontStyle: 'italic', marginTop: '2px' }}>{item.notes}</p>}
                       </td>
                       <td style={{ padding: '11px 10px', verticalAlign: 'top', textAlign: 'center', color: '#888', fontSize: '10px' }}>{HSN_CEILING}</td>
-                      <td style={{ padding: '11px 10px', verticalAlign: 'top', textAlign: 'right', color: '#111', fontWeight: 600 }}>{item.quantity}</td>
-                      <td style={{ padding: '11px 10px', verticalAlign: 'top', textAlign: 'right', color: '#555', whiteSpace: 'nowrap' }}>{fmtINR(unitPrice)}</td>
+                      <td style={{ padding: '11px 10px', verticalAlign: 'top', textAlign: 'right', color: '#111', fontWeight: 600 }}>
+                        {isSqft ? `${totalSqft.toFixed(1)}` : item.quantity}
+                      </td>
+                      <td style={{ padding: '11px 10px', verticalAlign: 'top', textAlign: 'right', color: '#555', whiteSpace: 'nowrap' }}>
+                        {isSqft ? fmtINR(pricePerSqft) : fmtINR(unitPrice)}
+                      </td>
                       <td style={{ padding: '11px 10px', verticalAlign: 'top', textAlign: 'right', fontWeight: 700, color: '#111', whiteSpace: 'nowrap' }}>{fmtINR(totalAmount)}</td>
                     </tr>
                   )
@@ -380,7 +389,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
 
             {quote.displayMode === 'per-sqft' && bd.totalSqft > 0 && (
               <p style={{ textAlign: 'right', fontSize: '10px', color: '#aaa', marginTop: '5px' }}>
-                {bd.totalSqft.toFixed(1)} sqft &nbsp;·&nbsp; {fmtINR(bd.pricePerSqft)}/sqft
+                Total: {bd.totalSqft.toFixed(1)} sqft &nbsp;·&nbsp; Avg {fmtINR(bd.pricePerSqft)}/sqft
               </p>
             )}
 

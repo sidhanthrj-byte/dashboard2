@@ -44,6 +44,7 @@ export function defaultItem(id: string): CeilingItem {
     daliDriver: 'dt8',
     driverOverrides: {},
     preferredDriverWatt: undefined,
+    marginMM: 0,
     printingRatePerSqm: undefined,
     notes: '',
   }
@@ -370,6 +371,24 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
               </label>
             </div>
           </div>
+
+          {/* Fabric margin */}
+          {item.shape !== 'circle' && (
+            <div className="max-w-[220px]">
+              <label className="label">Fabric Margin (mm per side)</label>
+              <input
+                type="number" min="0" max="500" step="10" className="input"
+                value={item.marginMM ?? 0}
+                onChange={e => {
+                  const v = parseInt(e.target.value)
+                  set('marginMM', isNaN(v) || v < 0 ? 0 : v)
+                }}
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                Smart: margin moves to cut side if it would jump to a wider roll. Affects fabric cost only.
+              </p>
+            </div>
+          )}
 
           {/* Gripper */}
           <div className="max-w-xs">

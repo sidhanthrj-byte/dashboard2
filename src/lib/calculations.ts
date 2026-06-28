@@ -109,6 +109,42 @@ function bestCenterJointPanels(d1M: number, d2M: number): { panels: FabricPanel[
   }
 }
 
+// Smart margin: avoid roll-width jump by moving margin to cut axis when necessary.
+// marginM = per-side margin in metres. Only affects fabric billing, not LED/gripper/installation.
+function applySmartMargin(d1M: number, d2M: number, marginM: number): { d1M: number; d2M: number } {
+  if (marginM <= 0) return { d1M, d2M }
+
+  const roll1 = bestRollForWidth(d1M)
+  const roll2 = bestRollForWidth(d2M)
+
+  // Determine which dim is the roll axis (lower wastage)
+  let rollIsD1: boolean
+  if (roll1 !== null && roll2 !== null) {
+    rollIsD1 = (roll1 - d1M) * d2M <= (roll2 - d2M) * d1M
+  } else {
+    rollIsD1 = roll1 !== null
+  }
+
+  const rollDim = rollIsD1 ? d1M : d2M
+  const cutDim  = rollIsD1 ? d2M : d1M
+  const currentRoll = bestRollForWidth(rollDim)
+  const totalMargin = 2 * marginM
+
+  let newRoll = rollDim
+  let newCut  = cutDim
+
+  if (currentRoll === null || totalMargin <= currentRoll - rollDim) {
+    // No roll jump — apply margin to both dimensions
+    newRoll = rollDim + totalMargin
+    newCut  = cutDim  + totalMargin
+  } else {
+    // Would jump — move all margin to cut axis, keep roll axis unchanged
+    newCut = cutDim + totalMargin
+  }
+
+  return rollIsD1 ? { d1M: newRoll, d2M: newCut } : { d1M: newCut, d2M: newRoll }
+}
+
 function computeFabricDetail(
   d1M: number,  // raw input dimension 1 (not pre-oriented)
   d2M: number,  // raw input dimension 2 (not pre-oriented)
@@ -366,14 +402,16 @@ export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: 
     ? (manualRates?.otherItemsTier ?? 'dealer')
     : tier
 
-  // Fabric
+  // Fabric (margins applied to billing dims only — not to area/perimeter/LED/installation)
+  const marginM = (item.marginMM ?? 0) / 1000
   let fabricDetail: FabricDetail
   if (item.shape === 'circle') {
-    // Circles: roll billing with 1m minimum roll width; cut = diameter + 400mm (200mm per side)
+    // Circles: roll billing with 1m minimum roll width; cut = diameter + margin (default 200mm per side)
     const D = geo.dim1M
+    const circleMargin = marginM > 0 ? marginM : 0.2  // default 200mm per side for circles
     const CIRCLE_ROLLS = [1, 2, 3, 4, 5]
     const roll = CIRCLE_ROLLS.find(r => r >= D) ?? 5
-    const cutLength = round2(D + 0.4)
+    const cutLength = round2(D + 2 * circleMargin)
     const panelArea = round2(roll * cutLength)
     const usedArea = round2(Math.PI * (D / 2) ** 2) // actual circle area
     const wastageArea = round2(panelArea - usedArea)
@@ -386,7 +424,7 @@ export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: 
         usedArea,
         wastageArea,
         wastagePercent: round2((wastageArea / panelArea) * 100),
-        orientation: `${roll}m roll × ${cutLength.toFixed(2)}m cut (circle, 200mm margin)`,
+        orientation: `${roll}m roll × ${cutLength.toFixed(2)}m cut (circle, ${Math.round(circleMargin * 1000)}mm margin/side)`,
         isJoint: false,
       }],
       totalBilledArea: panelArea,
@@ -396,7 +434,9 @@ export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: 
       jointPosition: '',
     }
   } else {
-    fabricDetail = computeFabricDetail(geo.dim1M, geo.dim2M, item)
+    // Apply smart margin to rectangle/triangle/l-shape fabric dims
+    const { d1M: fd1, d2M: fd2 } = applySmartMargin(geo.dim1M, geo.dim2M, marginM)
+    fabricDetail = computeFabricDetail(fd1, fd2, item)
   }
   const fabPrice = FABRIC[item.fabricType] ?? FABRIC['Descor Premium']
   const fabRate = tier === 'manual' && manualRates ? manualRates.fabricPerSqm : p(fabPrice, effectiveTier)
