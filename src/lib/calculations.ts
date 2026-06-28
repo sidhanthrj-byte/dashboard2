@@ -34,9 +34,10 @@ function readTwoDims(dims: unknown): { dim1: number; dim2: number } {
 }
 
 // Returns null when no available roll can fit this width (> 5m max)
+// 0.1mm tolerance handles floating-point imprecision (e.g. 1.8 + 0.2 = 2.0000000000000004)
 function bestRollForWidth(widthM: number): number | null {
   const widthMM = widthM * 1000
-  const fit = ROLL_WIDTHS.find(r => r * 1000 >= widthMM)
+  const fit = ROLL_WIDTHS.find(r => r * 1000 >= widthMM - 0.1)
   return fit ?? null
 }
 
