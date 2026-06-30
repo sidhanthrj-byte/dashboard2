@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
     await db.execute(
       `INSERT INTO inv_purchase_items (id, purchase_id, product_id, description, category, quantity, unit, unit_price, total_price)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [itemId, id, item.product_id ?? null, item.description ?? null, item.category ?? null, Number(item.quantity ?? 0), item.unit ?? 'nos', Number(item.unit_price ?? 0), Number(item.total_price ?? 0)],
+      [itemId, id, (item.product_id as string) ?? null, (item.description as string) ?? null, (item.category as string) ?? null, Number(item.quantity ?? 0), (item.unit as string) ?? 'nos', Number(item.unit_price ?? 0), Number(item.total_price ?? 0)],
     )
   }
 
