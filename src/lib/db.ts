@@ -617,3 +617,123 @@ export async function initPermissionsTables() {
   }
   _permInit = true
 }
+
+// ===========================================================================
+// AUTH + ACCESS REQUESTS
+// ===========================================================================
+
+export async function initAuthTables() {
+  const db = getClient()
+  // Add role column to app_users if missing
+  try { await db.execute(`ALTER TABLE app_users ADD COLUMN role TEXT DEFAULT 'viewer'`) } catch {}
+  try { await db.execute(`ALTER TABLE app_users ADD COLUMN password_hash TEXT`) } catch {}
+  // Seed admin user
+  const admin = await db.execute(`SELECT id FROM app_users WHERE email = 'sidhanthrj@gmail.com'`)
+  if (!admin.rows.length) {
+    await db.execute(
+      `INSERT INTO app_users (id, name, email, role, access_level, status) VALUES (?,?,?,?,?,?)`,
+      [crypto.randomUUID(), 'Sidhant', 'sidhanthrj@gmail.com', 'admin', 'admin', 'active']
+    )
+  } else {
+    await db.execute(`UPDATE app_users SET role='admin', access_level='admin', status='active' WHERE email='sidhanthrj@gmail.com'`)
+  }
+
+  await db.execute(`CREATE TABLE IF NOT EXISTS access_requests (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL UNIQUE,
+    phone TEXT,
+    city TEXT,
+    requested_role TEXT DEFAULT 'viewer',
+    reason TEXT,
+    status TEXT DEFAULT 'pending',
+    reviewed_by TEXT,
+    reviewed_at TEXT,
+    notes TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  )`)
+
+  await db.execute(`CREATE TABLE IF NOT EXISTS auth_sessions (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now')),
+    expires_at TEXT NOT NULL
+  )`)
+}
+
+export async function dbListAccessRequests(status?: string) {
+  await initAuthTables()
+  const db = getClient()
+  if (status) {
+    const r = await db.execute('SELECT * FROM access_requests WHERE status = ? ORDER BY created_at DESC', [status])
+    return r.rows
+  }
+  const r = await db.execute('SELECT * FROM access_requests ORDER BY created_at DESC')
+  return r.rows
+}
+
+export async function dbApproveAccessRequest(id: string, approverEmail: string, role: string) {
+  await initAuthTables()
+  const db = getClient()
+  const req = await db.execute('SELECT * FROM access_requests WHERE id = ?', [id])
+  if (!req.rows[0]) throw new Error('Request not found')
+  const r = req.rows[0] as Record<string, unknown>
+
+  // Create or update user
+  const existing = await db.execute('SELECT id FROM app_users WHERE email = ?', [r.email as string])
+  const now = new Date().toISOString()
+  if (existing.rows.length) {
+    await db.execute(
+      `UPDATE app_users SET name=?, role=?, access_level=?, status='active', city=? WHERE email=?`,
+      [String(r.name), role, role, r.city ? String(r.city) : null, String(r.email)]
+    )
+  } else {
+    await db.execute(
+      `INSERT INTO app_users (id, name, email, phone, city, role, access_level, status) VALUES (?,?,?,?,?,?,?,?)`,
+      [crypto.randomUUID(), String(r.name), String(r.email), r.phone ? String(r.phone) : null, r.city ? String(r.city) : null, role, role, 'active']
+    )
+  }
+  await db.execute(
+    `UPDATE access_requests SET status='approved', reviewed_by=?, reviewed_at=? WHERE id=?`,
+    [approverEmail, now, id]
+  )
+}
+
+export async function dbDenyAccessRequest(id: string, approverEmail: string, notes?: string) {
+  await initAuthTables()
+  const db = getClient()
+  const now = new Date().toISOString()
+  await db.execute(
+    `UPDATE access_requests SET status='denied', reviewed_by=?, reviewed_at=?, notes=? WHERE id=?`,
+    [approverEmail, now, notes ?? null, id]
+  )
+}
+
+export async function dbGetUserByEmail(email: string) {
+  await initAuthTables()
+  const db = getClient()
+  const r = await db.execute('SELECT * FROM app_users WHERE email = ? AND status = ?', [email, 'active'])
+  return r.rows[0] ?? null
+}
+
+export async function dbCreateSession(userId: string) {
+  await initAuthTables()
+  const db = getClient()
+  const id = crypto.randomUUID()
+  const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+  await db.execute('INSERT INTO auth_sessions (id, user_id, expires_at) VALUES (?,?,?)', [id, userId, expires])
+  return id
+}
+
+export async function dbGetSession(sessionId: string) {
+  await initAuthTables()
+  const db = getClient()
+  const now = new Date().toISOString()
+  const r = await db.execute(
+    `SELECT s.*, u.name, u.email, u.role, u.access_level FROM auth_sessions s
+     JOIN app_users u ON u.id = s.user_id
+     WHERE s.id = ? AND s.expires_at > ?`,
+    [sessionId, now]
+  )
+  return r.rows[0] ?? null
+}

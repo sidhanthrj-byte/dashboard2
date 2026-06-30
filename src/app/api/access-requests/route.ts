@@ -1,0 +1,31 @@
+export const dynamic = 'force-dynamic'
+import { NextRequest, NextResponse } from 'next/server'
+import { initAuthTables, dbListAccessRequests, getDbClient } from '@/lib/db'
+
+export async function GET(req: NextRequest) {
+  const status = req.nextUrl.searchParams.get('status') ?? undefined
+  const rows = await dbListAccessRequests(status)
+  return NextResponse.json(rows)
+}
+
+export async function POST(req: NextRequest) {
+  await initAuthTables()
+  const db = getDbClient()
+  const b = await req.json()
+  if (!b.email || !b.name) return NextResponse.json({ error: 'Name and email required' }, { status: 400 })
+
+  // Check if already requested or user exists
+  const existing = await db.execute('SELECT id, status FROM access_requests WHERE email = ?', [b.email.toLowerCase()])
+  if (existing.rows.length) {
+    const st = String(existing.rows[0].status)
+    if (st === 'pending') return NextResponse.json({ error: 'You already have a pending request.' }, { status: 409 })
+    if (st === 'approved') return NextResponse.json({ error: 'Your request was already approved. Please log in.' }, { status: 409 })
+  }
+
+  const id = crypto.randomUUID()
+  await db.execute(
+    `INSERT OR REPLACE INTO access_requests (id, name, email, phone, city, requested_role, reason) VALUES (?,?,?,?,?,?,?)`,
+    [id, b.name, b.email.toLowerCase(), b.phone ?? null, b.city ?? null, b.requested_role ?? 'viewer', b.reason ?? null]
+  )
+  return NextResponse.json({ ok: true, id }, { status: 201 })
+}
