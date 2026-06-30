@@ -1,12 +1,14 @@
 'use client'
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const next = searchParams.get('next') || '/'
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
@@ -23,7 +25,7 @@ export default function LoginPage() {
       setLoading(false)
       return
     }
-    router.push('/')
+    router.push(next)
     router.refresh()
   }
 
