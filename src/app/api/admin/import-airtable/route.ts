@@ -121,7 +121,19 @@ export async function POST(req: NextRequest) {
     }
     results.clients = clientCount
 
-    return NextResponse.json({ ok: true, imported: results })
+    // Count totals in DB
+    const [sc, pc, cc] = await Promise.all([
+      db.execute('SELECT COUNT(*) as c FROM inv_suppliers'),
+      db.execute('SELECT COUNT(*) as c FROM inv_products'),
+      db.execute('SELECT COUNT(*) as c FROM clients'),
+    ])
+    const totals = {
+      suppliers: Number((sc.rows[0] as Record<string,unknown>).c),
+      products: Number((pc.rows[0] as Record<string,unknown>).c),
+      clients: Number((cc.rows[0] as Record<string,unknown>).c),
+    }
+
+    return NextResponse.json({ ok: true, imported: results, totals })
   } catch (e) {
     return NextResponse.json({ error: String(e) }, { status: 500 })
   }
