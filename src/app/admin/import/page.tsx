@@ -88,7 +88,7 @@ export default function ImportPage() {
               <div className="space-y-1 text-green-800">
                 <div className="font-semibold">Import complete!</div>
                 {result.imported && Object.entries(result.imported as Record<string, number>).map(([k, v]) => (
-                  <div key={k}>• {v} new {k} imported</div>
+                  <div key={k}>• {Number(v)} new {k} imported</div>
                 ))}
               </div>
             ) : (
