@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { NextRequest, NextResponse } from 'next/server'
 import { initPermissionsTables, getDbClient } from '@/lib/db'
 

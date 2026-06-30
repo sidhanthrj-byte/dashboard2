@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { dbListActivity } from '@/lib/db'
 import { fmtDate } from '@/lib/format'
 

@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { NextResponse } from 'next/server'
 import { initQuotesTable, initInventoryTables, initProjectsTables, getDbClient } from '@/lib/db'
 

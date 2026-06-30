@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { dbListProducts } from '@/lib/db'
 
 type Row = Record<string, unknown>
