@@ -99,6 +99,14 @@ export default function UsersDashboard() {
         </div>
       </div>
 
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center justify-between">
+        <div>
+          <p className="text-sm font-semibold text-amber-900">Import data from Airtable</p>
+          <p className="text-xs text-amber-700 mt-0.5">Sync inventory products, suppliers and clients from your Airtable workspace</p>
+        </div>
+        <a href="/admin/import" className="bg-amber-600 hover:bg-amber-700 text-white text-sm px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap">Open Import →</a>
+      </div>
+
       <div className="bg-white rounded-xl border border-gray-200">
         <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-gray-900">User Directory</h2>
