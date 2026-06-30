@@ -109,7 +109,7 @@ export default function AllUsersPage() {
                       <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
                         <span className="text-xs font-bold text-blue-700">{u.name.charAt(0).toUpperCase()}</span>
                       </div>
-                      <span className="font-medium text-gray-900">{u.name}</span>
+                      <a href={`/users/${u.id}`} className="font-medium text-gray-900 hover:text-blue-600 hover:underline">{u.name}</a>
                     </div>
                   </td>
                   <td className="px-4 py-3 text-gray-600">{u.email ?? '—'}</td>

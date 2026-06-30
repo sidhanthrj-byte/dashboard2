@@ -35,9 +35,14 @@ export async function GET() {
     .map(([month, amount]) => ({ month, amount }))
 
   const productCounts: Record<string, number> = {}
+  let stockValue = 0
+  let lowStockCount = 0
   for (const p of products.rows) {
     const cat = String(p.category ?? 'Uncategorized')
     productCounts[cat] = (productCounts[cat] ?? 0) + 1
+    stockValue += Number(p.current_stock ?? 0) * Number(p.cost_price ?? 0)
+    const min = Number((p as Record<string, unknown>).min_stock ?? 0)
+    if (min > 0 && Number(p.current_stock ?? 0) <= min) lowStockCount++
   }
 
   return NextResponse.json({
@@ -50,5 +55,7 @@ export async function GET() {
     },
     productCounts,
     totalProducts: products.rows.length,
+    stockValue,
+    lowStockCount,
   })
 }

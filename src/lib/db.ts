@@ -477,7 +477,9 @@ export async function dbListActivity(limit = 100) {
   await initPermissionsTables()
   const db = getClient()
   const r = await db.execute(
-    `SELECT a.*, u.name as user_name FROM user_activity_log a
+    `SELECT a.id, a.user_id, a.action, a.details, a.created_at,
+            COALESCE(u.name, a.user_name) as user_name
+     FROM user_activity_log a
      LEFT JOIN app_users u ON u.id = a.user_id
      ORDER BY a.created_at DESC LIMIT ?`,
     [limit],

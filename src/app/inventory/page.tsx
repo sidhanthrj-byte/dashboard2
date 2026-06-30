@@ -28,6 +28,8 @@ interface Stats {
   }
   productCounts: Record<string, number>
   totalProducts: number
+  stockValue: number
+  lowStockCount: number
 }
 
 export default function InventoryDashboard() {
@@ -82,6 +84,14 @@ export default function InventoryDashboard() {
       <div>
         <h2 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wide">Inventory</h2>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="card">
+            <p className="text-xs text-gray-500 mb-1">Total Stock Value</p>
+            <p className="text-2xl font-bold text-emerald-600">₹{Math.round(stats.stockValue ?? 0).toLocaleString('en-IN')}</p>
+          </div>
+          <div className="card">
+            <p className="text-xs text-gray-500 mb-1">Low Stock Items</p>
+            <p className={`text-2xl font-bold ${(stats.lowStockCount ?? 0) > 0 ? 'text-rose-600' : 'text-gray-900'}`}>{stats.lowStockCount ?? 0}</p>
+          </div>
           <div className="card">
             <p className="text-xs text-gray-500 mb-1">Total Products</p>
             <p className="text-2xl font-bold text-gray-900">{stats.totalProducts}</p>

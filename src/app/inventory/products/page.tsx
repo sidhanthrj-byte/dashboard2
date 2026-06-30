@@ -127,7 +127,7 @@ export default function ProductsPage() {
             <tbody>
               {products.map(p => (
                 <tr key={p.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
-                  <td className="px-4 py-2.5 font-medium">{p.name}</td>
+                  <td className="px-4 py-2.5 font-medium"><a href={`/inventory/products/${p.id}`} className="text-gray-900 hover:text-emerald-600 hover:underline">{p.name}</a></td>
                   <td className="px-4 py-2.5">
                     {p.category && <span className={`badge ${CATEGORY_COLORS[p.category] ?? 'bg-gray-100 text-gray-700'}`}>{p.category}</span>}
                   </td>
