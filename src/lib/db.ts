@@ -134,6 +134,61 @@ export async function dbNextQuoteNumber() {
   return `Q-${String(max + 1).padStart(4, '0')}`
 }
 
+export function getDbClient() {
+  return getClient()
+}
+
+export async function initInventoryTables() {
+  const db = getClient()
+  await db.batch([
+    db.prepare(`CREATE TABLE IF NOT EXISTS inv_products (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, category TEXT, sku TEXT, unit TEXT DEFAULT 'nos',
+      current_stock REAL DEFAULT 0, min_stock REAL DEFAULT 0,
+      cost_price REAL DEFAULT 0, sell_price REAL DEFAULT 0,
+      supplier_id TEXT, notes TEXT,
+      created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now'))
+    )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS inv_suppliers (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, contact_name TEXT,
+      email TEXT, phone TEXT, city TEXT, address TEXT, notes TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS inv_purchases (
+      id TEXT PRIMARY KEY, purchase_number TEXT NOT NULL,
+      supplier_id TEXT, supplier_name TEXT,
+      purchase_date TEXT NOT NULL, total_amount REAL DEFAULT 0,
+      status TEXT DEFAULT 'received', notes TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS inv_purchase_items (
+      id TEXT PRIMARY KEY, purchase_id TEXT NOT NULL,
+      product_id TEXT, description TEXT, category TEXT,
+      quantity REAL DEFAULT 0, unit TEXT DEFAULT 'nos',
+      unit_price REAL DEFAULT 0, total_price REAL DEFAULT 0
+    )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS inv_movements (
+      id TEXT PRIMARY KEY, product_id TEXT, product_name TEXT,
+      movement_type TEXT NOT NULL, quantity REAL NOT NULL,
+      reference_type TEXT, reference_id TEXT, notes TEXT,
+      movement_date TEXT DEFAULT (datetime('now')),
+      created_at TEXT DEFAULT (datetime('now'))
+    )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS inv_work_completions (
+      id TEXT PRIMARY KEY, project_name TEXT NOT NULL,
+      client_name TEXT, location TEXT, completion_date TEXT,
+      status TEXT DEFAULT 'completed', amount REAL DEFAULT 0,
+      notes TEXT, created_at TEXT DEFAULT (datetime('now'))
+    )`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS app_users (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT,
+      city TEXT, access_level TEXT DEFAULT 'editor',
+      bases TEXT DEFAULT '[]', status TEXT DEFAULT 'active',
+      phone TEXT, notes TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    )`),
+  ], 'deferred')
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function rowToQuote(row: any): Record<string, unknown> {
   return {
