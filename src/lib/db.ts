@@ -737,3 +737,124 @@ export async function dbGetSession(sessionId: string) {
   )
   return r.rows[0] ?? null
 }
+
+// ===========================================================================
+// CLIENTS MODULE
+// ===========================================================================
+let _clientsInit = false
+export async function initClientsTable() {
+  if (_clientsInit) return
+  const db = getClient()
+  await db.execute(`CREATE TABLE IF NOT EXISTS clients (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    company TEXT,
+    email TEXT,
+    phone TEXT,
+    city TEXT,
+    address TEXT,
+    gst_number TEXT,
+    source TEXT DEFAULT 'direct',
+    status TEXT DEFAULT 'active',
+    notes TEXT,
+    tags TEXT DEFAULT '[]',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  )`)
+  _clientsInit = true
+}
+
+// ===========================================================================
+// PAYMENTS MODULE
+// ===========================================================================
+let _paymentsInit = false
+export async function initPaymentsTable() {
+  if (_paymentsInit) return
+  const db = getClient()
+  await db.execute(`CREATE TABLE IF NOT EXISTS project_payments (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    type TEXT DEFAULT 'payment',
+    amount REAL NOT NULL,
+    payment_date TEXT NOT NULL,
+    method TEXT DEFAULT 'bank_transfer',
+    reference TEXT,
+    notes TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  )`)
+  await db.execute(`CREATE TABLE IF NOT EXISTS project_expenses (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    category TEXT DEFAULT 'materials',
+    description TEXT NOT NULL,
+    amount REAL NOT NULL,
+    expense_date TEXT NOT NULL,
+    paid_to TEXT,
+    notes TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  )`)
+  await db.execute(`CREATE TABLE IF NOT EXISTS project_checklists (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    phase TEXT NOT NULL,
+    item TEXT NOT NULL,
+    done INTEGER DEFAULT 0,
+    done_by TEXT,
+    done_at TEXT,
+    sort_order INTEGER DEFAULT 0
+  )`)
+  _paymentsInit = true
+}
+
+export async function dbSeedProjectChecklist(projectId: string) {
+  await initPaymentsTable()
+  const db = getClient()
+  const existing = await db.execute('SELECT COUNT(*) as c FROM project_checklists WHERE project_id = ?', [projectId])
+  if (Number((existing.rows[0] as Record<string, unknown>).c) > 0) return
+  const items = [
+    // [phase, item, sort]
+    ['pre-install', 'Site survey completed', 0],
+    ['pre-install', 'Measurements verified', 1],
+    ['pre-install', 'Materials ordered/confirmed', 2],
+    ['pre-install', 'Client sign-off on design', 3],
+    ['pre-install', 'Team briefed', 4],
+    ['install', 'Gripper track fixed', 0],
+    ['install', 'Fabric stretched and fixed', 1],
+    ['install', 'LED strips installed', 2],
+    ['install', 'Drivers wired and tested', 3],
+    ['install', 'Lighting tested', 4],
+    ['install', 'Site cleaned', 5],
+    ['post-install', 'Client walkthrough done', 0],
+    ['post-install', 'Snag list addressed', 1],
+    ['post-install', 'Photos taken', 2],
+    ['post-install', 'Warranty card handed over', 3],
+    ['post-install', 'Invoice raised', 4],
+    ['post-install', 'Payment collected', 5],
+  ]
+  for (const [phase, item, sort] of items) {
+    await db.execute(
+      'INSERT INTO project_checklists (id, project_id, phase, item, sort_order) VALUES (?,?,?,?,?)',
+      [crypto.randomUUID(), projectId, phase, item, sort]
+    )
+  }
+}
+
+// ===========================================================================
+// FOLLOW-UPS
+// ===========================================================================
+let _followupsInit = false
+export async function initFollowupsTable() {
+  if (_followupsInit) return
+  const db = getClient()
+  await db.execute(`CREATE TABLE IF NOT EXISTS follow_ups (
+    id TEXT PRIMARY KEY,
+    quote_id TEXT NOT NULL,
+    client_name TEXT NOT NULL,
+    due_date TEXT NOT NULL,
+    note TEXT,
+    done INTEGER DEFAULT 0,
+    done_at TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  )`)
+  _followupsInit = true
+}

@@ -5,6 +5,7 @@ import { calculateQuote, fmtINR, formatDims, round2 } from '@/lib/calculations'
 import type { ItemBreakdown } from '@/lib/types'
 import { Edit, Eye } from 'lucide-react'
 import PrintButton from '@/components/PrintButton'
+import ConvertToProjectButton from '@/components/ConvertToProjectButton'
 
 export default async function TeamPage({ params }: { params: { id: string } }) {
   const quote = await dbGetQuote(params.id)
@@ -38,6 +39,7 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
           <a href={`/quotes/${quote.id}/edit`} className="btn-secondary text-xs gap-1.5">
             <Edit size={14} /> Edit
           </a>
+          <ConvertToProjectButton quoteId={quote.id} status={quote.status ?? ''} />
           <PrintButton />
         </div>
       </div>

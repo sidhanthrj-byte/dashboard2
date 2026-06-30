@@ -31,6 +31,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <a href="/quotes" className="text-xs font-medium text-gray-500 hover:text-gray-900 px-2.5 py-2 rounded-lg hover:bg-gray-100 transition-colors">Quotes</a>
               <a href="/projects" className="text-xs font-medium text-gray-500 hover:text-gray-900 px-2.5 py-2 rounded-lg hover:bg-gray-100 transition-colors">Projects</a>
               <a href="/inventory" className="text-xs font-medium text-gray-500 hover:text-gray-900 px-2.5 py-2 rounded-lg hover:bg-gray-100 transition-colors">Inventory</a>
+              <a href="/clients" className="text-xs font-medium text-gray-500 hover:text-gray-900 px-2.5 py-2 rounded-lg hover:bg-gray-100 transition-colors">Clients</a>
+              <a href="/finance" className="text-xs font-medium text-gray-500 hover:text-gray-900 px-2.5 py-2 rounded-lg hover:bg-gray-100 transition-colors">Finance</a>
               <a href="/analytics" className="text-xs font-medium text-gray-500 hover:text-gray-900 px-2.5 py-2 rounded-lg hover:bg-gray-100 transition-colors">Analytics</a>
               <a href="/users" className="text-xs font-medium text-gray-500 hover:text-gray-900 px-2.5 py-2 rounded-lg hover:bg-gray-100 transition-colors">Users</a>
               <NotificationBell />

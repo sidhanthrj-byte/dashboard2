@@ -69,6 +69,8 @@ export interface Quote {
   notes: string
   createdAt: string
   updatedAt: string
+  status?: string
+  grandTotal?: number
 }
 
 export interface LineItem {
