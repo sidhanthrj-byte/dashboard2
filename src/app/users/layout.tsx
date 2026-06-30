@@ -1,11 +1,13 @@
 'use client'
 
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Users } from 'lucide-react'
+import { LayoutDashboard, Users, Shield, Activity } from 'lucide-react'
 
 const navItems = [
   { label: 'Dashboard', href: '/users', icon: LayoutDashboard },
   { label: 'All Users', href: '/users/all', icon: Users },
+  { label: 'Permissions', href: '/users/permissions', icon: Shield },
+  { label: 'Activity Log', href: '/users/activity', icon: Activity },
 ]
 
 export default function UsersLayout({ children }: { children: React.ReactNode }) {

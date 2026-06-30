@@ -1,14 +1,16 @@
 'use client'
 
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Package, Truck, ShoppingCart, ArrowLeftRight, CheckSquare, Activity } from 'lucide-react'
+import { LayoutDashboard, Package, Truck, ShoppingCart, ArrowLeftRight, CheckSquare, Activity, AlertTriangle, Layers } from 'lucide-react'
 
 const navItems = [
   { label: 'Dashboard', href: '/inventory', icon: LayoutDashboard },
-  { label: 'Products Inventory', href: '/inventory/products', icon: Package },
+  { label: 'Products', href: '/inventory/products', icon: Package },
+  { label: 'Fabric Rolls', href: '/inventory/fabric-rolls', icon: Layers },
   { label: 'Suppliers', href: '/inventory/suppliers', icon: Truck },
   { label: 'Purchases', href: '/inventory/purchases', icon: ShoppingCart },
-  { label: 'Inventory Movement', href: '/inventory/movements', icon: ArrowLeftRight },
+  { label: 'Stock Movements', href: '/inventory/movements', icon: ArrowLeftRight },
+  { label: 'Reorder Alerts', href: '/inventory/reorder', icon: AlertTriangle },
   { label: 'Work Completion', href: '/inventory/work-completion', icon: CheckSquare },
   { label: 'Activity', href: '/inventory/activity', icon: Activity },
 ]

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import NotificationBell from '@/components/NotificationBell'
 
 export const metadata: Metadata = {
   title: 'Pongs Quotation System',
@@ -24,14 +25,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </div>
             </a>
 
-            <nav className="flex items-center gap-1">
-              <a href="/" className="text-xs font-medium text-gray-500 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors">
-                Dashboard
-              </a>
-              <a href="/inventory" className="text-xs font-medium text-gray-500 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors">Inventory</a>
-              <a href="/users" className="text-xs font-medium text-gray-500 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors">Users</a>
-              <a href="/quotes/new"
-                className="btn-primary text-xs px-4 py-2 gap-1.5">
+            <nav className="flex items-center gap-0.5">
+              <a href="/" className="text-xs font-medium text-gray-500 hover:text-gray-900 px-2.5 py-2 rounded-lg hover:bg-gray-100 transition-colors">Dashboard</a>
+              <a href="/quotes" className="text-xs font-medium text-gray-500 hover:text-gray-900 px-2.5 py-2 rounded-lg hover:bg-gray-100 transition-colors">Quotes</a>
+              <a href="/projects" className="text-xs font-medium text-gray-500 hover:text-gray-900 px-2.5 py-2 rounded-lg hover:bg-gray-100 transition-colors">Projects</a>
+              <a href="/inventory" className="text-xs font-medium text-gray-500 hover:text-gray-900 px-2.5 py-2 rounded-lg hover:bg-gray-100 transition-colors">Inventory</a>
+              <a href="/analytics" className="text-xs font-medium text-gray-500 hover:text-gray-900 px-2.5 py-2 rounded-lg hover:bg-gray-100 transition-colors">Analytics</a>
+              <a href="/users" className="text-xs font-medium text-gray-500 hover:text-gray-900 px-2.5 py-2 rounded-lg hover:bg-gray-100 transition-colors">Users</a>
+              <NotificationBell />
+              <a href="/quotes/new" className="btn-primary text-xs px-3 py-2 gap-1.5 ml-1">
                 <span className="text-base leading-none font-light">+</span> New Quote
               </a>
             </nav>

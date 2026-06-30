@@ -192,6 +192,339 @@ export async function initInventoryTables() {
   }
 }
 
+// ===========================================================================
+// PROJECTS / JOBS MODULE
+// ===========================================================================
+
+// initProjectsTables is defined further below (canonical version).
+
+export interface ProjectFilters {
+  status?: string | null
+  month?: string | null
+  priority?: string | null
+}
+
+export async function dbListProjects(filters: ProjectFilters = {}) {
+  await initProjectsTables()
+  const db = getClient()
+  let sql = 'SELECT * FROM projects WHERE 1=1'
+  const args: InValue[] = []
+  if (filters.status) { sql += ' AND status = ?'; args.push(filters.status) }
+  if (filters.priority) { sql += ' AND priority = ?'; args.push(filters.priority) }
+  if (filters.month) { sql += " AND substr(scheduled_date,1,7) = ?"; args.push(filters.month) }
+  sql += ' ORDER BY scheduled_date ASC, created_at DESC'
+  const result = args.length ? await db.execute(sql, args) : await db.execute(sql)
+  return result.rows
+}
+
+export async function dbGetProject(id: string) {
+  await initProjectsTables()
+  const db = getClient()
+  const proj = await db.execute('SELECT * FROM projects WHERE id = ?', [id])
+  if (!proj.rows.length) return null
+  const materials = await db.execute('SELECT * FROM project_materials WHERE project_id = ?', [id])
+  const updates = await db.execute('SELECT * FROM project_updates WHERE project_id = ? ORDER BY created_at DESC', [id])
+  return { ...proj.rows[0], materials: materials.rows, updates: updates.rows }
+}
+
+function projectArgs(body: Record<string, unknown>): InValue[] {
+  const tm = Array.isArray(body.team_members) ? JSON.stringify(body.team_members) : ((body.team_members as string) ?? '[]')
+  return [
+    body.name as string ?? '',
+    body.client_name as string ?? '',
+    (body.client_phone as string) ?? null,
+    (body.client_email as string) ?? null,
+    body.site_address as string ?? '',
+    (body.city as string) ?? null,
+    (body.quote_id as string) ?? null,
+    (body.status as string) ?? 'scheduled',
+    (body.scheduled_date as string) ?? null,
+    (body.completion_date as string) ?? null,
+    (body.team_lead as string) ?? null,
+    tm,
+    Number(body.ceiling_area_sqft ?? 0),
+    Number(body.contract_value ?? 0),
+    (body.notes as string) ?? null,
+    (body.priority as string) ?? 'normal',
+  ]
+}
+
+export async function dbCreateProject(body: Record<string, unknown>) {
+  await initProjectsTables()
+  const db = getClient()
+  const id = (body.id as string) || crypto.randomUUID()
+  await db.execute(
+    `INSERT INTO projects (id, name, client_name, client_phone, client_email, site_address, city,
+      quote_id, status, scheduled_date, completion_date, team_lead, team_members,
+      ceiling_area_sqft, contract_value, notes, priority)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [id, ...projectArgs(body)],
+  )
+  const r = await db.execute('SELECT * FROM projects WHERE id = ?', [id])
+  return r.rows[0]
+}
+
+export async function dbUpdateProject(id: string, body: Record<string, unknown>) {
+  await initProjectsTables()
+  const db = getClient()
+  await db.execute(
+    `UPDATE projects SET name=?, client_name=?, client_phone=?, client_email=?, site_address=?, city=?,
+      quote_id=?, status=?, scheduled_date=?, completion_date=?, team_lead=?, team_members=?,
+      ceiling_area_sqft=?, contract_value=?, notes=?, priority=?, updated_at=datetime('now') WHERE id=?`,
+    [...projectArgs(body), id],
+  )
+  const r = await db.execute('SELECT * FROM projects WHERE id = ?', [id])
+  return r.rows[0]
+}
+
+export async function dbDeleteProject(id: string) {
+  await initProjectsTables()
+  const db = getClient()
+  await db.execute('DELETE FROM projects WHERE id = ?', [id])
+  await db.execute('DELETE FROM project_materials WHERE project_id = ?', [id])
+  await db.execute('DELETE FROM project_updates WHERE project_id = ?', [id])
+}
+
+export async function dbAddProjectUpdate(projectId: string, body: Record<string, unknown>) {
+  await initProjectsTables()
+  const db = getClient()
+  const id = crypto.randomUUID()
+  await db.execute(
+    `INSERT INTO project_updates (id, project_id, note, status, created_by) VALUES (?,?,?,?,?)`,
+    [id, projectId, (body.note as string) ?? '', (body.status as string) ?? null, (body.created_by as string) ?? null],
+  )
+  if (body.status) {
+    await db.execute(`UPDATE projects SET status=?, updated_at=datetime('now') WHERE id=?`, [body.status as string, projectId])
+  }
+  const r = await db.execute('SELECT * FROM project_updates WHERE id = ?', [id])
+  return r.rows[0]
+}
+
+export async function dbListProjectUpdates(projectId: string) {
+  await initProjectsTables()
+  const db = getClient()
+  const r = await db.execute('SELECT * FROM project_updates WHERE project_id = ? ORDER BY created_at DESC', [projectId])
+  return r.rows
+}
+
+export async function dbProjectStats() {
+  await initProjectsTables()
+  const db = getClient()
+  const r = await db.execute('SELECT * FROM projects')
+  const rows = r.rows as unknown as Record<string, unknown>[]
+  const now = new Date()
+  const today = now.toISOString().slice(0, 10)
+  const thisMonth = today.slice(0, 7)
+  const weekEnd = new Date(now.getTime() + 7 * 86400000).toISOString().slice(0, 10)
+
+  const byStatus: Record<string, number> = {}
+  let totalActive = 0, scheduledThisWeek = 0, completedThisMonth = 0, invoicedThisMonthValue = 0
+  let pipelineValue = 0
+  const pipelineByStatus: Record<string, number> = {}
+
+  for (const p of rows) {
+    const status = String(p.status ?? 'scheduled')
+    byStatus[status] = (byStatus[status] ?? 0) + 1
+    const sd = String(p.scheduled_date ?? '')
+    const cd = String(p.completion_date ?? '')
+    const value = Number(p.contract_value ?? 0)
+    pipelineByStatus[status] = (pipelineByStatus[status] ?? 0) + value
+    if (status !== 'completed' && status !== 'invoiced' && status !== 'cancelled') {
+      totalActive++
+      pipelineValue += value
+    }
+    if (sd && sd >= today && sd <= weekEnd) scheduledThisWeek++
+    if (status === 'completed' && cd.startsWith(thisMonth)) completedThisMonth++
+    if (status === 'invoiced' && (cd.startsWith(thisMonth) || sd.startsWith(thisMonth))) invoicedThisMonthValue += value
+  }
+
+  return { byStatus, totalActive, scheduledThisWeek, completedThisMonth, invoicedThisMonthValue, pipelineValue, pipelineByStatus, today, weekEnd }
+}
+
+// ===========================================================================
+// ANALYTICS
+// ===========================================================================
+
+export async function dbQuoteAnalytics() {
+  await initQuotesTable()
+  const db = getClient()
+  const r = await db.execute('SELECT date, grand_total, status, client_name FROM pongs_quotes')
+  const rows = r.rows as unknown as Record<string, unknown>[]
+  const byMonthMap: Record<string, { count: number; value: number }> = {}
+  const statusBreakdown: Record<string, number> = { draft: 0, sent: 0, approved: 0, rejected: 0 }
+  for (const q of rows) {
+    const month = String(q.date ?? '').slice(0, 7)
+    if (month) {
+      byMonthMap[month] = byMonthMap[month] ?? { count: 0, value: 0 }
+      byMonthMap[month].count++
+      byMonthMap[month].value += Number(q.grand_total ?? 0)
+    }
+    const st = String(q.status ?? 'draft')
+    statusBreakdown[st] = (statusBreakdown[st] ?? 0) + 1
+  }
+  const byMonth = Object.entries(byMonthMap)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .slice(-6)
+    .map(([month, v]) => ({ month, count: v.count, value: v.value }))
+  return { byMonth, statusBreakdown }
+}
+
+export async function dbTopClients() {
+  await initQuotesTable()
+  const db = getClient()
+  const r = await db.execute('SELECT client_name, grand_total, date FROM pongs_quotes')
+  const rows = r.rows as unknown as Record<string, unknown>[]
+  const map: Record<string, { count: number; value: number; lastDate: string }> = {}
+  for (const q of rows) {
+    const name = String(q.client_name ?? 'Unknown')
+    map[name] = map[name] ?? { count: 0, value: 0, lastDate: '' }
+    map[name].count++
+    map[name].value += Number(q.grand_total ?? 0)
+    const d = String(q.date ?? '')
+    if (d > map[name].lastDate) map[name].lastDate = d
+  }
+  return Object.entries(map)
+    .map(([client, v]) => ({ client, ...v }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 10)
+}
+
+export async function dbInventoryValue() {
+  await initInventoryTables()
+  const db = getClient()
+  const r = await db.execute('SELECT category, current_stock, cost_price FROM inv_products')
+  const rows = r.rows as unknown as Record<string, unknown>[]
+  const byCategory: Record<string, number> = {}
+  let total = 0
+  for (const p of rows) {
+    const cat = String(p.category ?? 'Uncategorized')
+    const val = Number(p.current_stock ?? 0) * Number(p.cost_price ?? 0)
+    byCategory[cat] = (byCategory[cat] ?? 0) + val
+    total += val
+  }
+  return { total, byCategory: Object.entries(byCategory).map(([category, value]) => ({ category, value })).sort((a, b) => b.value - a.value) }
+}
+
+export async function dbTopConsumedProducts() {
+  await initInventoryTables()
+  const db = getClient()
+  const r = await db.execute("SELECT product_name, quantity FROM inv_movements WHERE movement_type = 'OUT'")
+  const rows = r.rows as unknown as Record<string, unknown>[]
+  const map: Record<string, number> = {}
+  for (const m of rows) {
+    const name = String(m.product_name ?? 'Unknown')
+    map[name] = (map[name] ?? 0) + Number(m.quantity ?? 0)
+  }
+  return Object.entries(map).map(([name, qty]) => ({ name, qty })).sort((a, b) => b.qty - a.qty).slice(0, 5)
+}
+
+export async function dbLowStockProducts() {
+  await initInventoryTables()
+  const db = getClient()
+  const r = await db.execute('SELECT * FROM inv_products WHERE current_stock <= min_stock AND min_stock > 0 ORDER BY (current_stock - min_stock) ASC')
+  return r.rows
+}
+
+export async function dbListProducts(category?: string | null) {
+  await initInventoryTables()
+  const db = getClient()
+  const r = category
+    ? await db.execute('SELECT * FROM inv_products WHERE category = ? ORDER BY name', [category])
+    : await db.execute('SELECT * FROM inv_products ORDER BY name')
+  return r.rows
+}
+
+export async function dbGetProduct(id: string) {
+  await initInventoryTables()
+  const db = getClient()
+  const p = await db.execute('SELECT * FROM inv_products WHERE id = ?', [id])
+  if (!p.rows.length) return null
+  const movements = await db.execute('SELECT * FROM inv_movements WHERE product_id = ? ORDER BY movement_date ASC', [id])
+  return { ...p.rows[0], movements: movements.rows }
+}
+
+export async function dbProjectPipelineStats() {
+  return dbProjectStats()
+}
+
+// ===========================================================================
+// ROLE PERMISSIONS + USER ACTIVITY
+// ===========================================================================
+
+// Matrix: each feature has a default per role. We model View + Manage/Edit
+// as separate can_view / can_edit flags per (role, feature) pair.
+export const PERMISSION_ROLES = ['admin', 'manager', 'sales', 'installer', 'viewer']
+export const PERMISSION_FEATURES = ['quotes', 'inventory', 'projects', 'analytics', 'users']
+// initPermissionsTables is defined further below (canonical version).
+
+export async function dbListPermissions() {
+  await initPermissionsTables()
+  const db = getClient()
+  const r = await db.execute('SELECT * FROM role_permissions ORDER BY role, feature')
+  return r.rows
+}
+
+export async function dbLogActivity(userId: string | null, action: string, details?: string) {
+  await initPermissionsTables()
+  const db = getClient()
+  await db.execute(
+    'INSERT INTO user_activity_log (id, user_id, action, details) VALUES (?,?,?,?)',
+    [crypto.randomUUID(), userId, action, details ?? null],
+  )
+}
+
+export async function dbListActivity(limit = 100) {
+  await initPermissionsTables()
+  const db = getClient()
+  const r = await db.execute(
+    `SELECT a.*, u.name as user_name FROM user_activity_log a
+     LEFT JOIN app_users u ON u.id = a.user_id
+     ORDER BY a.created_at DESC LIMIT ?`,
+    [limit],
+  )
+  return r.rows
+}
+
+export async function dbListUsers(filters: { city?: string | null; status?: string | null; access_level?: string | null } = {}) {
+  await initInventoryTables()
+  const db = getClient()
+  let sql = 'SELECT * FROM app_users WHERE 1=1'
+  const args: InValue[] = []
+  if (filters.city) { sql += ' AND city = ?'; args.push(filters.city) }
+  if (filters.status) { sql += ' AND status = ?'; args.push(filters.status) }
+  if (filters.access_level) { sql += ' AND access_level = ?'; args.push(filters.access_level) }
+  sql += ' ORDER BY name'
+  const r = args.length ? await db.execute(sql, args) : await db.execute(sql)
+  return r.rows
+}
+
+export async function dbGetUser(id: string) {
+  await initInventoryTables()
+  const db = getClient()
+  const r = await db.execute('SELECT * FROM app_users WHERE id = ?', [id])
+  return r.rows[0] ?? null
+}
+
+// ===========================================================================
+// NOTIFICATIONS
+// ===========================================================================
+
+export async function dbNotificationCounts() {
+  await initInventoryTables()
+  await initProjectsTables()
+  const db = getClient()
+  const lowStock = await db.execute('SELECT id, name, current_stock, min_stock FROM inv_products WHERE current_stock <= min_stock AND min_stock > 0')
+  const today = new Date().toISOString().slice(0, 10)
+  const todayJobs = await db.execute('SELECT id, name, client_name, team_lead FROM projects WHERE scheduled_date = ?', [today])
+  return {
+    lowStockCount: lowStock.rows.length,
+    todayJobsCount: todayJobs.rows.length,
+    lowStock: lowStock.rows,
+    todayJobs: todayJobs.rows,
+    total: lowStock.rows.length + todayJobs.rows.length,
+  }
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function rowToQuote(row: any): Record<string, unknown> {
   return {
@@ -218,4 +551,67 @@ function rowToQuote(row: any): Record<string, unknown> {
     updatedAt: row.updated_at,
     manualRates: row.manual_rates_json ? JSON.parse(row.manual_rates_json as string) : undefined,
   }
+}
+
+let _projectsInit = false
+export async function initProjectsTables() {
+  if (_projectsInit) return
+  const db = getClient()
+  await db.execute(`CREATE TABLE IF NOT EXISTS projects (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, client_name TEXT NOT NULL,
+    client_phone TEXT, client_email TEXT, site_address TEXT, city TEXT,
+    quote_id TEXT, status TEXT DEFAULT 'scheduled',
+    scheduled_date TEXT, completion_date TEXT,
+    team_lead TEXT, team_members TEXT DEFAULT '[]',
+    ceiling_area_sqft REAL DEFAULT 0, contract_value REAL DEFAULT 0,
+    priority TEXT DEFAULT 'normal', notes TEXT,
+    created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now'))
+  )`)
+  await db.execute(`CREATE TABLE IF NOT EXISTS project_materials (
+    id TEXT PRIMARY KEY, project_id TEXT NOT NULL,
+    product_id TEXT, description TEXT NOT NULL,
+    qty REAL NOT NULL, unit TEXT DEFAULT 'pcs', notes TEXT
+  )`)
+  await db.execute(`CREATE TABLE IF NOT EXISTS project_updates (
+    id TEXT PRIMARY KEY, project_id TEXT NOT NULL,
+    note TEXT NOT NULL, status TEXT, created_by TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  )`)
+  _projectsInit = true
+}
+
+const DEFAULT_PERMISSIONS = [
+  { feature: 'quotes',     view: { admin:1, manager:1, sales:1, installer:0, viewer:1 }, edit: { admin:1, manager:1, sales:1, installer:0, viewer:0 } },
+  { feature: 'inventory',  view: { admin:1, manager:1, sales:0, installer:0, viewer:0 }, edit: { admin:1, manager:1, sales:0, installer:0, viewer:0 } },
+  { feature: 'projects',   view: { admin:1, manager:1, sales:1, installer:1, viewer:1 }, edit: { admin:1, manager:1, sales:0, installer:1, viewer:0 } },
+  { feature: 'analytics',  view: { admin:1, manager:1, sales:0, installer:0, viewer:0 }, edit: { admin:1, manager:1, sales:0, installer:0, viewer:0 } },
+  { feature: 'users',      view: { admin:1, manager:1, sales:0, installer:0, viewer:0 }, edit: { admin:1, manager:0, sales:0, installer:0, viewer:0 } },
+]
+
+let _permInit = false
+export async function initPermissionsTables() {
+  if (_permInit) return
+  const db = getClient()
+  await db.execute(`CREATE TABLE IF NOT EXISTS role_permissions (
+    id TEXT PRIMARY KEY, role TEXT NOT NULL, feature TEXT NOT NULL,
+    can_view INTEGER DEFAULT 0, can_edit INTEGER DEFAULT 0,
+    updated_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(role, feature)
+  )`)
+  await db.execute(`CREATE TABLE IF NOT EXISTS user_activity_log (
+    id TEXT PRIMARY KEY, user_id TEXT, action TEXT NOT NULL,
+    details TEXT, created_at TEXT DEFAULT (datetime('now'))
+  )`)
+  const existing = await db.execute('SELECT COUNT(*) as c FROM role_permissions')
+  if (Number((existing.rows[0] as Record<string,unknown>).c) === 0) {
+    for (const { feature, view, edit } of DEFAULT_PERMISSIONS) {
+      for (const role of ['admin','manager','sales','installer','viewer']) {
+        await db.execute(
+          'INSERT INTO role_permissions (id, role, feature, can_view, can_edit) VALUES (?,?,?,?,?)',
+          [crypto.randomUUID(), role, feature, (view as Record<string,number>)[role]??0, (edit as Record<string,number>)[role]??0]
+        )
+      }
+    }
+  }
+  _permInit = true
 }
