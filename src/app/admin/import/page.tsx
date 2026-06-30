@@ -3,7 +3,7 @@ import { useState } from 'react'
 
 export default function ImportPage() {
   const [importing, setImporting] = useState(false)
-  const [result, setResult] = useState<Record<string, unknown> | null>(null)
+  const [result, setResult] = useState<{ ok?: boolean; imported?: Record<string, number>; error?: string } | null>(null)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<Record<string, unknown> | null>(null)
 
@@ -87,8 +87,8 @@ export default function ImportPage() {
             {result.ok ? (
               <div className="space-y-1 text-green-800">
                 <div className="font-semibold">Import complete!</div>
-                {result.imported && Object.entries(result.imported as Record<string, number>).map(([k, v]) => (
-                  <div key={k}>• {Number(v)} new {k} imported</div>
+                {result.imported && Object.entries(result.imported).map(([k, v]) => (
+                  <div key={k}>• {v} new {k} imported</div>
                 ))}
               </div>
             ) : (
