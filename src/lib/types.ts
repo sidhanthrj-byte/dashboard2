@@ -43,6 +43,10 @@ export interface CeilingItem {
   daliDriver: 'dt8' | 'da4m'  // DALI tunable only: which driver type
   driverOverrides: Record<string, number>  // qty overrides for driver/control line items (can increase or decrease)
   preferredDriverWatt?: '50W' | '100W' | '150W' | '200W' | '350W' | '400W' | '600W'  // force a single driver size instead of auto-mix
+  // Lighting configuration: 'looped' treats all pieces (quantity) as ONE continuous
+  // lighting system — drivers sized from combined wattage. 'non_looped' (default)
+  // sizes drivers per ceiling then multiplies by quantity.
+  lightingConfig?: 'looped' | 'non_looped'
   marginMM?: number  // fabric margin per side in mm (smart: moved to cut axis if it would cause roll-width jump)
   printingRatePerSqm?: number  // override standard printing rate
   notes: string
@@ -71,6 +75,10 @@ export interface Quote {
   updatedAt: string
   status?: string
   grandTotal?: number
+  // Multi-company: which company this quotation is issued from
+  company?: string
+  // Ownership: email of the user who created the quote (RBAC)
+  ownerEmail?: string
 }
 
 export interface LineItem {

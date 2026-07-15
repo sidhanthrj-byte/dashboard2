@@ -8,6 +8,7 @@ import CeilingItemForm, { defaultItem } from './CeilingItemForm'
 import type { Quote, CeilingItem, PriceTier, QuoteDisplayMode, ManualRates } from '@/lib/types'
 import { calculateQuote, fmtINR } from '@/lib/calculations'
 import { listClients, saveClient, deleteClient, type SavedClient } from '@/lib/clients'
+import { listCompanies, DEFAULT_COMPANY } from '@/lib/companies'
 
 interface Props {
   initial?: Quote
@@ -37,6 +38,7 @@ export default function QuoteBuilder({ initial, mode }: Props) {
     includeGst: initial?.includeGst ?? false,
     displayMode: (initial?.displayMode ?? 'total') as QuoteDisplayMode,
     notes: initial?.notes ?? '',
+    company: initial?.company ?? DEFAULT_COMPANY,
   })
 
   const [manualRates, setManualRates] = useState<ManualRates>(
@@ -213,6 +215,26 @@ export default function QuoteBuilder({ initial, mode }: Props) {
             <span className="w-5 h-5 rounded-full bg-slate-800 text-white text-xs font-bold flex items-center justify-center">1</span>
             Project Details
           </h2>
+          {/* Company selector (required) — determines quotation branding */}
+          <div className="mb-5">
+            <label className="label">Issuing Company *</label>
+            <div className="flex gap-2 flex-wrap">
+              {listCompanies().map(c => (
+                <button key={c.id} type="button"
+                  onClick={() => setMeta(m => ({ ...m, company: c.id }))}
+                  className={`px-4 py-2.5 rounded-xl border text-sm font-semibold transition-all ${
+                    meta.company === c.id
+                      ? 'border-emerald-600 bg-emerald-600 text-white shadow-sm'
+                      : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                  }`}
+                >
+                  <span className="block">{c.shortName}</span>
+                  <span className={`block text-[10px] font-normal ${meta.company === c.id ? 'text-emerald-50' : 'text-slate-400'}`}>{c.name}</span>
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-slate-500 mt-1.5">The quotation PDF uses this company&apos;s name, address, GST and bank details. Products, pricing and calculations are identical for both.</p>
+          </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="label">Client Name *</label>

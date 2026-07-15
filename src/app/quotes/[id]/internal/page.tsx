@@ -1,4 +1,5 @@
 import { dbGetQuote } from "@/lib/db"
+import { canAccessQuote } from "@/lib/session"
 export const dynamic = 'force-dynamic'
 import { notFound } from 'next/navigation'
 import { calculateQuote, fmtINR, round2 } from '@/lib/calculations'
@@ -8,6 +9,7 @@ import PrintButton from '@/components/PrintButton'
 export default async function InternalPage({ params }: { params: { id: string } }) {
   const quote = await dbGetQuote(params.id)
   if (!quote) notFound()
+  if (!(await canAccessQuote(quote.ownerEmail))) notFound()
 
   const bd = calculateQuote(quote)
 
@@ -124,14 +126,14 @@ export default async function InternalPage({ params }: { params: { id: string } 
               </thead>
               <tbody>
                 {item.lineItems.map((li, li_idx) => {
-                  const qty = item.item.quantity
-                  const totalQty = round2(li.qty * qty)
-                  const totalAmt = round2(li.tierAmount * qty)
+                  // Line items already carry TOTAL quantities (× item quantity)
+                  const totalQty = round2(li.qty)
+                  const totalAmt = round2(li.tierAmount)
                   return (
                   <tr key={li_idx} className="border-b border-slate-100 hover:bg-slate-50">
                     <td className="px-5 py-2.5 text-xs text-slate-400">{li_idx + 1}</td>
                     <td className="px-3 py-2.5 text-slate-700">{li.description}</td>
-                    <td className="px-3 py-2.5 text-right text-slate-700">{totalQty}{qty > 1 && <span className="text-xs text-slate-400 ml-1">({li.qty}×{qty})</span>}</td>
+                    <td className="px-3 py-2.5 text-right text-slate-700">{totalQty}</td>
                     <td className="px-3 py-2.5 text-right text-slate-500 text-xs">{li.unit}</td>
                     <td className="px-3 py-2.5 text-right text-slate-600">{fmtINR(li.tierRate)}</td>
                     <td className="px-5 py-2.5 text-right font-medium text-slate-800">{fmtINR(totalAmt)}</td>

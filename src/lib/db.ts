@@ -47,8 +47,32 @@ export async function initQuotesTable() {
   try {
     await db.execute(`ALTER TABLE pongs_quotes ADD COLUMN manual_rates_json TEXT`)
   } catch { /* already exists */ }
+  // Migrate: ownership (RBAC) — every quote belongs to the user who created it
+  try {
+    await db.execute(`ALTER TABLE pongs_quotes ADD COLUMN owner_email TEXT`)
+  } catch { /* already exists */ }
+  // Migrate: multi-company (STC / NLS) — which company the quote is issued from
+  try {
+    await db.execute(`ALTER TABLE pongs_quotes ADD COLUMN company TEXT DEFAULT 'STC'`)
+  } catch { /* already exists */ }
+  // Backfill: any quote without a company defaults to STC
+  await db.execute(`UPDATE pongs_quotes SET company = 'STC' WHERE company IS NULL OR company = ''`)
+  // Backfill: legacy quotes with no owner are assigned to the seed admin so nothing
+  // is orphaned and standard users never inherit historic quotes by accident.
+  await db.execute(`UPDATE pongs_quotes SET owner_email = 'sidhanthrj@gmail.com' WHERE owner_email IS NULL OR owner_email = ''`)
   // Migrate: bump any quotes still using the old ₹60 default to ₹120
   await db.execute(`UPDATE pongs_quotes SET installation_rate = 120 WHERE installation_rate = 60`)
+}
+
+// Ownership-aware listing. Pass ownerEmail=null for admins (all quotes),
+// or a specific email for a standard user (only their own).
+export async function dbListQuotesForUser(ownerEmail: string | null): Promise<Quote[]> {
+  await initQuotesTable()
+  const db = getClient()
+  const result = ownerEmail === null
+    ? await db.execute('SELECT * FROM pongs_quotes ORDER BY created_at DESC')
+    : await db.execute('SELECT * FROM pongs_quotes WHERE owner_email = ? ORDER BY created_at DESC', [ownerEmail])
+  return result.rows.map(rowToQuote) as unknown as Quote[]
 }
 
 export async function dbListQuotes(): Promise<Quote[]> {
@@ -96,12 +120,15 @@ export async function dbSaveQuote(quote: Record<string, unknown>) {
     String(quote.createdAt ?? now),
     now,
     quote.manualRates ? JSON.stringify(quote.manualRates) : null,
+    (quote.ownerEmail as string) ?? null,
+    String(quote.company ?? 'STC'),
   ]
   await db.execute(
     `INSERT INTO pongs_quotes (id, quote_number, client_name, project_name, location, date, valid_until,
       price_tier, markup_percent, installation_rate, transport_cost, include_gst, display_mode,
-      items_json, notes, grand_total, client_email, client_phone, status, created_at, updated_at, manual_rates_json)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      items_json, notes, grand_total, client_email, client_phone, status, created_at, updated_at, manual_rates_json,
+      owner_email, company)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       ON CONFLICT(id) DO UPDATE SET
         client_name=excluded.client_name, project_name=excluded.project_name,
         location=excluded.location, date=excluded.date, valid_until=excluded.valid_until,
@@ -111,7 +138,8 @@ export async function dbSaveQuote(quote: Record<string, unknown>) {
         items_json=excluded.items_json, notes=excluded.notes, grand_total=excluded.grand_total,
         client_email=excluded.client_email, client_phone=excluded.client_phone,
         status=excluded.status, updated_at=excluded.updated_at,
-        manual_rates_json=excluded.manual_rates_json`,
+        manual_rates_json=excluded.manual_rates_json,
+        company=excluded.company`,
     args,
   )
 }
@@ -552,6 +580,8 @@ function rowToQuote(row: any): Record<string, unknown> {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     manualRates: row.manual_rates_json ? JSON.parse(row.manual_rates_json as string) : undefined,
+    ownerEmail: row.owner_email ?? undefined,
+    company: row.company ?? 'STC',
   }
 }
 

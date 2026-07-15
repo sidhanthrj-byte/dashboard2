@@ -4,7 +4,8 @@ import { Trash2, ChevronDown, ChevronUp } from 'lucide-react'
 import { useState, useMemo } from 'react'
 import type { CeilingItem, ShapeType, LightType, GripperType, LEDWidth, UnitSystem, SurfaceType, JointType, ManualRates } from '@/lib/types'
 import { FABRIC } from '@/lib/pricing'
-import { calculateItem, fmtINR, round2 } from '@/lib/calculations'
+import { calculateItem, fmtINR, round2, manualDriverWarning } from '@/lib/calculations'
+import { SC_WATTS_PER_M_STANDARD, SC_WATTS_PER_M_12DOT, LED_WATTS_PER_M } from '@/lib/pricing'
 
 const FABRIC_OPTIONS = Object.keys(FABRIC)
 
@@ -44,6 +45,7 @@ export function defaultItem(id: string): CeilingItem {
     daliDriver: 'dt8',
     driverOverrides: {},
     preferredDriverWatt: undefined,
+    lightingConfig: 'non_looped',
     marginMM: 0,
     printingRatePerSqm: undefined,
     notes: '',
@@ -513,9 +515,30 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
                       >{label}</button>
                     ))}
                   </div>
-                  <p className="text-xs text-slate-500 mt-1">Auto picks fewest drivers using largest size first. Override to force a single size.</p>
+                  <p className="text-xs text-slate-500 mt-1">Auto prefers 200W drivers (600W runs hot and needs a fan — avoided unless necessary). Override to force a single size.</p>
                 </div>
               )}
+              {/* Looped / Non-Looped lighting configuration */}
+              <div>
+                <label className="label">Lighting Configuration</label>
+                <div className="flex gap-2">
+                  {([['non_looped', 'Non-Looped'], ['looped', 'Looped']] as const).map(([val, label]) => (
+                    <button key={val} type="button"
+                      onClick={() => onChange({ ...item, lightingConfig: val, driverOverrides: {} })}
+                      className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
+                        (item.lightingConfig ?? 'non_looped') === val
+                          ? 'border-slate-700 bg-slate-800 text-white'
+                          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                      }`}
+                    >{label}</button>
+                  ))}
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  {(item.lightingConfig ?? 'non_looped') === 'looped'
+                    ? 'Looped: all pieces run as one continuous system — drivers sized once from combined wattage (usually fewer drivers).'
+                    : 'Non-Looped: each ceiling is an independent circuit — drivers calculated per piece × quantity.'}
+                </p>
+              </div>
               {/* 12-dot module option for single colour */}
               {(item.lightType === 'single_color' || item.lightType === 'single_color_dimmable') && (
                 <div>
@@ -572,14 +595,15 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
               {(() => {
                 const panels = preview.fabricDetail.panels
                 const hasJoint = preview.fabricDetail.hasJoint && panels.length > 1
+                // Gripper comes in 1m lengths — always rounded UP to whole metres per ceiling
                 const gripperQty = hasJoint
-                  ? round2(panels.reduce((s, p) => s + 2 * (p.physicalWidth + p.cutLength), 0))
-                  : Math.ceil(preview.perimeterM * 10) / 10
+                  ? Math.ceil(panels.reduce((s, p) => s + 2 * (p.physicalWidth + p.cutLength), 0))
+                  : Math.ceil(preview.perimeterM)
                 const jointNote = hasJoint
                   ? ` (${panels.map((p, i) => `P${i+1}: 2×(${p.physicalWidth.toFixed(2)}+${p.cutLength.toFixed(2)})m`).join(', ')})`
                   : ''
                 return (
-                  <p>• Gripper: {round2(gripperQty * item.quantity).toFixed(2)} rmt {item.gripperType}{item.quantity > 1 ? ` (${gripperQty.toFixed(2)} × ${item.quantity})` : ''}{jointNote}</p>
+                  <p>• Gripper: {gripperQty * item.quantity} rmt {item.gripperType}{item.quantity > 1 ? ` (${gripperQty} × ${item.quantity})` : ''} — rounded up to whole metres{jointNote}</p>
                 )
               })()}
               {/* Drivers & Controls with manual override */}
@@ -644,6 +668,26 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
                         )
                       })}
                     </div>
+                  </div>
+                )
+              })()}
+              {/* Advisory: manual driver capacity vs auto best mix (>30% = warn, never blocks) */}
+              {(() => {
+                if (!item.preferredDriverWatt || !preview.ledDetail) return null
+                const isSC = item.lightType === 'single_color' || item.lightType === 'single_color_dimmable'
+                const wattsPerM = isSC
+                  ? (item.ledModuleType === '12dot' ? SC_WATTS_PER_M_12DOT : SC_WATTS_PER_M_STANDARD)
+                  : LED_WATTS_PER_M
+                const isLooped = item.lightingConfig === 'looped'
+                const totalModules = isLooped
+                  ? preview.ledDetail.totalRunningMeters * Math.max(1, item.quantity)
+                  : preview.ledDetail.totalRunningMeters
+                const warning = manualDriverWarning(totalModules, wattsPerM, item.preferredDriverWatt)
+                if (!warning) return null
+                return (
+                  <div className="mt-2 p-3 bg-amber-50 border border-amber-300 rounded-lg text-amber-800 text-xs flex gap-2">
+                    <span className="shrink-0">⚠</span>
+                    <span>{warning}</span>
                   </div>
                 )
               })()}

@@ -1,4 +1,5 @@
 import { dbGetQuote } from "@/lib/db"
+import { canAccessQuote } from "@/lib/session"
 export const dynamic = 'force-dynamic'
 import { notFound } from 'next/navigation'
 import { calculateQuote, fmtINR, formatDims, round2 } from '@/lib/calculations'
@@ -10,6 +11,7 @@ import ConvertToProjectButton from '@/components/ConvertToProjectButton'
 export default async function TeamPage({ params }: { params: { id: string } }) {
   const quote = await dbGetQuote(params.id)
   if (!quote) notFound()
+  if (!(await canAccessQuote(quote.ownerEmail))) notFound()
 
   const bd = calculateQuote(quote)
   const margin = bd.materialsTotalFinal - bd.materialsTotalDealer

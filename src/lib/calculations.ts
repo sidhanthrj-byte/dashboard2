@@ -286,17 +286,60 @@ function makeDriverSpecs(wattsPerM: number): { key: string; modules: number }[] 
     .sort((a, b) => b.modules - a.modules)
 }
 
-// Greedily pack modules into fewest drivers, using largest first
+// Auto Best Mix packing.
+// Real-world preference: 200W drivers run cool and silent; 600W drivers need active
+// cooling (fan noise) and are avoided on site. So the auto mix fills with 200W units
+// and covers the remainder with the smallest driver that fits — 600W is only used
+// if no other driver exists. Manual selection is never affected by this rule.
 function packDrivers(totalModules: number, specs: { key: string; modules: number }[]): Record<string, number> {
-  const sorted = [...specs].sort((a, b) => b.modules - a.modules)
   const counts: Record<string, number> = {}
+  if (totalModules <= 0 || specs.length === 0) return counts
+
+  // Exclude 600W from the auto pool unless it's the only driver available
+  const pool = specs.filter(s => s.key !== '600W')
+  const usable = pool.length > 0 ? pool : specs
+
+  const preferred = usable.find(s => s.key === '200W')
+    ?? [...usable].sort((a, b) => b.modules - a.modules)[0]
+
   let rem = totalModules
-  while (rem > 0) {
-    const fit = sorted.find(s => s.modules >= rem)
-    if (fit) { counts[fit.key] = (counts[fit.key] || 0) + 1; rem = 0 }
-    else { counts[sorted[0].key] = (counts[sorted[0].key] || 0) + 1; rem -= sorted[0].modules }
+  // Fill bulk with the preferred (200W) driver
+  while (rem > preferred.modules) {
+    counts[preferred.key] = (counts[preferred.key] || 0) + 1
+    rem -= preferred.modules
   }
+  // Remainder: smallest driver that covers it (efficient wattage utilisation)
+  const fit = usable
+    .filter(s => s.modules >= rem)
+    .sort((a, b) => a.modules - b.modules)[0] ?? preferred
+  counts[fit.key] = (counts[fit.key] || 0) + 1
   return counts
+}
+
+// Total watt capacity of a driver-count map (standard drivers only)
+function mixCapacityWatts(counts: Record<string, number>): number {
+  return Object.entries(counts).reduce((s, [k, q]) => s + (STANDARD_DRIVERS[k]?.watts ?? 0) * q, 0)
+}
+
+// Advisory check for manual driver selection: returns a warning string when the
+// manually selected capacity exceeds the Auto Best Mix capacity by more than 30%.
+// Non-blocking — callers should display it but never prevent saving.
+export function manualDriverWarning(
+  totalModules: number,
+  wattsPerM: number,
+  preferredDriverWatt?: string,
+): string | null {
+  if (!preferredDriverWatt || totalModules <= 0) return null
+  const specs = makeDriverSpecs(wattsPerM)
+  const manualSpec = specs.find(s => s.key === preferredDriverWatt)
+  if (!manualSpec) return null
+  const manualCount = Math.ceil(totalModules / manualSpec.modules)
+  const manualCapacity = manualCount * (STANDARD_DRIVERS[preferredDriverWatt]?.watts ?? 0)
+  const autoCapacity = mixCapacityWatts(packDrivers(totalModules, specs))
+  if (autoCapacity > 0 && manualCapacity > autoCapacity * 1.3) {
+    return `Manual driver selection (${manualCount} × ${preferredDriverWatt} = ${manualCapacity}W) exceeds the recommended automatic configuration (${autoCapacity}W) by more than 30%. This may increase project cost unnecessarily. Recommended: Auto Best Mix.`
+  }
+  return null
 }
 
 function addCtrl(key: string, qty: number, tier: PriceTier): LineItem {
@@ -397,6 +440,9 @@ export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: 
   const geo = getGeometry(item)
   const { widthM, lengthM, areaM2, perimeterM } = geo
   const lineItems: LineItem[] = []
+  // All line items below carry TOTAL quantities (per-unit × item.quantity) so that
+  // the displayed qty, costing, PDFs and reports always agree — no hidden multipliers.
+  const qty = Math.max(1, Math.round(item.quantity || 1))
 
   // When tier is 'manual', use manualRates for fabric/led/gripper; use chosen tier for other items
   const effectiveTier: PriceTier = tier === 'manual'
@@ -441,42 +487,47 @@ export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: 
   }
   const fabPrice = FABRIC[item.fabricType] ?? FABRIC['Descor Premium']
   const fabRate = tier === 'manual' && manualRates ? manualRates.fabricPerSqm : p(fabPrice, effectiveTier)
+  const fabricTotalQty = round2(fabricDetail.totalBilledArea * qty)
   lineItems.push({
-    description: `${item.fabricType} Fabric [${fabricDetail.panels[0]?.orientation ?? ''}, waste ${fabricDetail.totalWastageArea.toFixed(2)} sqm]`,
-    qty: round2(fabricDetail.totalBilledArea),
+    description: `${item.fabricType} Fabric [${fabricDetail.panels[0]?.orientation ?? ''}, waste ${fabricDetail.totalWastageArea.toFixed(2)} sqm${qty > 1 ? ` × ${qty} pcs` : ''}]`,
+    qty: fabricTotalQty,
     unit: 'sqm',
     dealerRate: fabPrice.dealer, tierRate: fabRate,
-    dealerAmount: round2(fabricDetail.totalBilledArea * fabPrice.dealer),
-    tierAmount:   round2(fabricDetail.totalBilledArea * fabRate),
+    dealerAmount: round2(fabricTotalQty * fabPrice.dealer),
+    tierAmount:   round2(fabricTotalQty * fabRate),
   })
 
   if (item.withPrinting) {
     const printRate = item.printingRatePerSqm ?? p(PRINTING, effectiveTier)
+    const printQty = round2(areaM2 * qty)
     lineItems.push({
       description: 'Printing Charges',
-      qty: round2(areaM2), unit: 'sqm',
+      qty: printQty, unit: 'sqm',
       dealerRate: PRINTING.dealer, tierRate: printRate,
-      dealerAmount: round2(areaM2 * PRINTING.dealer),
-      tierAmount:   round2(areaM2 * printRate),
+      dealerAmount: round2(printQty * PRINTING.dealer),
+      tierAmount:   round2(printQty * printRate),
     })
   }
 
   if (item.withFleece) {
+    const fleeceQty = round2(areaM2 * qty)
     lineItems.push({
       description: 'Felt Pad / Fleece',
-      qty: round2(areaM2), unit: 'sqm',
+      qty: fleeceQty, unit: 'sqm',
       dealerRate: FLEECE.dealer, tierRate: p(FLEECE, effectiveTier),
-      dealerAmount: round2(areaM2 * FLEECE.dealer),
-      tierAmount:   round2(areaM2 * p(FLEECE, effectiveTier)),
+      dealerAmount: round2(fleeceQty * FLEECE.dealer),
+      tierAmount:   round2(fleeceQty * p(FLEECE, effectiveTier)),
     })
   }
 
-  // Gripper — each panel (fabric box) needs its own perimeter
+  // Gripper — each panel (fabric box) needs its own perimeter.
+  // Gripper is supplied in 1m lengths only, so the per-ceiling quantity is ALWAYS
+  // rounded UP to the next whole metre (Math.ceil). E.g. 1.2 → 2, 2.7 → 3, 3.0 → 3.
   let gripQty: number
   let gripDesc: string
   if (fabricDetail.hasJoint && fabricDetail.panels.length > 1) {
     // Sum perimeters of all physical panels: 2*(physicalWidth + cutLength) per panel
-    gripQty = round2(
+    gripQty = Math.ceil(
       fabricDetail.panels.reduce((s, p) => s + 2 * (p.physicalWidth + p.cutLength), 0)
     )
     const panelDescs = fabricDetail.panels.map((p, i) =>
@@ -484,17 +535,19 @@ export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: 
     ).join(', ')
     gripDesc = `${item.gripperType} Gripper (${panelDescs})`
   } else {
-    gripQty = Math.ceil(perimeterM * 10) / 10
+    gripQty = Math.ceil(perimeterM)
     gripDesc = `${item.gripperType} Gripper`
   }
   const gripPrice = GRIPPER[item.gripperType] ?? GRIPPER['CW']
   const gripRate = tier === 'manual' && manualRates ? manualRates.gripperPerRmt : p(gripPrice, effectiveTier)
+  // Per-ceiling gripper is already ceiled to whole metres; multiply by quantity
+  const gripTotalQty = gripQty * qty
   lineItems.push({
     description: gripDesc,
-    qty: round2(gripQty), unit: 'rmt',
+    qty: gripTotalQty, unit: 'rmt',
     dealerRate: gripPrice.dealer, tierRate: gripRate,
-    dealerAmount: round2(gripQty * gripPrice.dealer),
-    tierAmount:   round2(gripQty * gripRate),
+    dealerAmount: round2(gripTotalQty * gripPrice.dealer),
+    tierAmount:   round2(gripTotalQty * gripRate),
   })
 
   // LED
@@ -524,16 +577,35 @@ export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: 
     const lKey = ledKey(item)
     const ledPrice = LED[lKey]
     const ledRate = tier === 'manual' && manualRates ? manualRates.ledPerMtr : p(ledPrice, effectiveTier)
+    const ledTotalQty = round2(totalRunningMeters * qty)
     lineItems.push({
-      description: `LED ${lKey} [${stripCount} strips × ${runningLengthM.toFixed(2)}m · ${wattsPerM}W/m = ${totalWatts}W total]`,
-      qty: totalRunningMeters, unit: 'mtr',
+      description: `LED ${lKey} [${stripCount} strips × ${runningLengthM.toFixed(2)}m · ${wattsPerM}W/m = ${totalWatts}W${qty > 1 ? ` × ${qty} pcs = ${round2(totalWatts * qty)}W total` : ' total'}]`,
+      qty: ledTotalQty, unit: 'mtr',
       dealerRate: ledPrice.dealer, tierRate: ledRate,
-      dealerAmount: round2(totalRunningMeters * ledPrice.dealer),
-      tierAmount:   round2(totalRunningMeters * ledRate),
+      dealerAmount: round2(ledTotalQty * ledPrice.dealer),
+      tierAmount:   round2(ledTotalQty * ledRate),
     })
 
-    const driverLines = buildDriverLines(totalRunningMeters, item.lightType, effectiveTier, item.daliDriver, item.preferredDriverWatt, item.ledModuleType)
-    // Apply manual overrides — user can increase or decrease qty
+    // Lighting configuration:
+    //  - Non-Looped (default / legacy): each ceiling is an independent circuit —
+    //    drivers are calculated per ceiling, then multiplied by quantity.
+    //  - Looped: all ceilings form one continuous lighting system — LED modules are
+    //    summed across the full quantity FIRST, then drivers are selected once from
+    //    the combined wattage. This usually yields fewer drivers.
+    const isLooped = item.lightingConfig === 'looped'
+    let driverLines: LineItem[]
+    if (isLooped) {
+      driverLines = buildDriverLines(totalRunningMeters * qty, item.lightType, effectiveTier, item.daliDriver, item.preferredDriverWatt, item.ledModuleType)
+    } else {
+      driverLines = buildDriverLines(totalRunningMeters, item.lightType, effectiveTier, item.daliDriver, item.preferredDriverWatt, item.ledModuleType)
+      // Scale per-ceiling driver counts to the full quantity
+      for (const dl of driverLines) {
+        dl.qty = dl.qty * qty
+        dl.dealerAmount = round2(dl.qty * dl.dealerRate)
+        dl.tierAmount = round2(dl.qty * dl.tierRate)
+      }
+    }
+    // Apply manual overrides — user can increase or decrease qty (override = TOTAL count)
     const overrides = item.driverOverrides ?? {}
     for (const dl of driverLines) {
       const ov = overrides[dl.description]
@@ -546,12 +618,13 @@ export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: 
     lineItems.push(...driverLines)
   }
 
-  const subtotalDealer = lineItems.reduce((s, l) => s + l.dealerAmount, 0)
-  const subtotalTier   = lineItems.reduce((s, l) => s + l.tierAmount,   0)
+  // Line items already carry TOTAL quantities — no further multiplication here
+  const subtotalDealer = round2(lineItems.reduce((s, l) => s + l.dealerAmount, 0))
+  const subtotalTier   = round2(lineItems.reduce((s, l) => s + l.tierAmount,   0))
 
   const rate = installRate ?? INSTALLATION_RATE_PER_SQFT
-  const installationCost = round2(areaM2 * SQFT_PER_SQM * rate * item.quantity)
-  const subtotalFinal = round2(subtotalTier * item.quantity)
+  const installationCost = round2(areaM2 * SQFT_PER_SQM * rate * qty)
+  const subtotalFinal = subtotalTier
 
   return {
     item,
@@ -566,8 +639,8 @@ export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: 
     ledDetail,
     lineItems,
     installationCost,
-    subtotalDealer: round2(subtotalDealer * item.quantity),
-    subtotalTier:   round2(subtotalTier   * item.quantity),
+    subtotalDealer,
+    subtotalTier,
     subtotalFinal,
     itemTotal: round2(subtotalFinal + installationCost),
   }

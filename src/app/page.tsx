@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import type { Quote } from '@/lib/types'
 import { fmtINR, calculateQuote } from '@/lib/calculations'
+import { listCompanies } from '@/lib/companies'
 
 const TIER_LABEL: Record<string, string> = { dealer: 'Dealer', msp: 'MSP', specifiors: 'Specifiors' }
 const TIER_CLASS: Record<string, string> = { dealer: 'badge-dealer', msp: 'badge-msp', specifiors: 'badge-specifiors' }
@@ -48,20 +49,27 @@ export default function HomePage() {
   const [deleting, setDeleting] = useState<string | null>(null)
   const [duplicating, setDuplicating] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<QuoteStatus | 'all'>('all')
+  const [companyFilter, setCompanyFilter] = useState<string>('all')
+  const [me, setMe] = useState<{ name?: string; role?: string; email?: string } | null>(null)
+  const isAdmin = me?.role === 'admin' || me?.email?.toLowerCase() === 'sidhanthrj@gmail.com'
 
-  const fetchQuotes = useCallback(async (q = '') => {
+  useEffect(() => {
+    fetch('/api/auth/me').then(r => r.json()).then(d => setMe(d)).catch(() => {})
+  }, [])
+
+  const fetchQuotes = useCallback(async (q = '', company = 'all') => {
     setLoading(true)
-    const res = await fetch(`/api/quotes?q=${encodeURIComponent(q)}`)
+    const res = await fetch(`/api/quotes?q=${encodeURIComponent(q)}&company=${encodeURIComponent(company)}`)
     const data = await res.json()
     setQuotes(Array.isArray(data) ? data : [])
     setLoading(false)
   }, [])
 
-  useEffect(() => { fetchQuotes() }, [fetchQuotes])
+  useEffect(() => { fetchQuotes('', companyFilter) }, [fetchQuotes, companyFilter])
   useEffect(() => {
-    const t = setTimeout(() => fetchQuotes(search), 300)
+    const t = setTimeout(() => fetchQuotes(search, companyFilter), 300)
     return () => clearTimeout(t)
-  }, [search, fetchQuotes])
+  }, [search, companyFilter, fetchQuotes])
 
   const totals = quotes.reduce((acc, q) => {
     try {
@@ -140,15 +148,30 @@ export default function HomePage() {
       {/* Page header */}
       <div className="flex items-center justify-between pt-1">
         <div>
-          <h1 className="text-2xl font-black text-gray-900 tracking-tight">Dashboard</h1>
+          <h1 className="text-2xl font-black text-gray-900 tracking-tight">
+            {isAdmin ? 'Dashboard' : `${me?.name ? me.name.split(' ')[0] + '’s' : 'My'} Workspace`}
+          </h1>
           <p className="text-sm text-gray-400 mt-0.5 font-medium">
-            {loading ? 'Loading…' : `${quotes.length} quote${quotes.length !== 1 ? 's' : ''}`}
+            {loading ? 'Loading…' : `${quotes.length} ${isAdmin ? 'quote' : 'of my quote'}${quotes.length !== 1 ? 's' : ''}`}
             {!loading && recentCount > 0 && ` · ${recentCount} this week`}
           </p>
         </div>
-        <a href="/quotes/new" className="btn-primary gap-2">
-          <Plus size={16} /> New Quote
-        </a>
+        <div className="flex items-center gap-3">
+          {/* Company filter — All / STC / NLS */}
+          <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">
+            {[{ id: 'all', label: 'All' }, ...listCompanies().map(c => ({ id: c.id, label: c.shortName }))].map(c => (
+              <button key={c.id}
+                onClick={() => setCompanyFilter(c.id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                  companyFilter === c.id ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >{c.label}</button>
+            ))}
+          </div>
+          <a href="/quotes/new" className="btn-primary gap-2">
+            <Plus size={16} /> New Quote
+          </a>
+        </div>
       </div>
 
       {/* Stats Grid */}
@@ -158,7 +181,7 @@ export default function HomePage() {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {[
               {
-                label: 'Total Quotes',
+                label: isAdmin ? 'Total Quotes' : 'My Quotes',
                 value: quotes.length,
                 sub: `avg ${fmtINR(avgQuoteValue)}`,
                 icon: <Hash size={16} />,
@@ -366,6 +389,9 @@ function QuoteCard({ quote, deleting, duplicating, onDelete, onDuplicate, onStat
         <div className="flex items-center gap-2 flex-wrap mb-1">
           <span className="font-bold text-gray-900 text-sm">{quote.clientName}</span>
           <span className="text-[10px] font-semibold text-gray-300 font-mono">{quote.quoteNumber}</span>
+          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-100">
+            {quote.company ?? 'STC'}
+          </span>
           <span className={`${TIER_CLASS[quote.priceTier] ?? 'badge-draft'}`}>
             {TIER_LABEL[quote.priceTier]}
           </span>

@@ -1,4 +1,5 @@
 import { dbGetQuote } from "@/lib/db"
+import { canAccessQuote } from "@/lib/session"
 export const dynamic = 'force-dynamic'
 import { notFound } from 'next/navigation'
 import { calculateQuote, fmtINR, formatDims, round2 } from '@/lib/calculations'
@@ -6,6 +7,8 @@ const SQFT_PER_SQM = 10.7639
 import { Edit, Users } from 'lucide-react'
 import PrintButton from '@/components/PrintButton'
 import SharePDF from '@/components/SharePDF'
+
+import { getCompany } from '@/lib/companies'
 
 const HSN_CEILING = '3921'
 
@@ -25,6 +28,10 @@ const lightLabel: Record<string, string> = {
 export default async function ClientPage({ params }: { params: { id: string } }) {
   const quote = await dbGetQuote(params.id)
   if (!quote) notFound()
+  if (!(await canAccessQuote(quote.ownerEmail))) notFound()
+
+  // Company branding for this quotation (STC / NLS / future companies)
+  const co = getCompany(quote.company)
 
   const bd = calculateQuote(quote)
 
@@ -42,20 +49,20 @@ export default async function ClientPage({ params }: { params: { id: string } })
   const hasPrinting = quote.items.some(i => i.withPrinting)
 
   const waMessage = encodeURIComponent(
-    `*PONGS Stretch Ceiling – Quotation*\n\n` +
+    `*${co.name} – Quotation*\n\n` +
     `*Quote:* ${quote.quoteNumber}\n*Client:* ${quote.clientName}\n` +
     `*Project:* ${quote.projectName || '—'}\n*Date:* ${dateStr}\n\n` +
     `*Grand Total: ${fmtINR(bd.grandTotal)}*${quote.includeGst ? ' (Incl. GST)' : ' (Excl. GST)'}\n\n` +
-    `_Sidharth Trading Co. | PONGS Stretch Ceiling_`
+    `_${co.name}_`
   )
   const waUrl = `https://wa.me/${quote.clientPhone ? quote.clientPhone.replace(/\D/g, '') : ''}?text=${waMessage}`
-  const mailUrl = `mailto:${quote.clientEmail ?? ''}?subject=Quotation ${quote.quoteNumber} – PONGS Stretch Ceiling&body=${encodeURIComponent(`Dear ${quote.clientName},\n\nPlease find attached our quotation ${quote.quoteNumber} for ${quote.projectName || 'your project'}.\n\nGrand Total: ${fmtINR(bd.grandTotal)}${quote.includeGst ? ' (Incl. GST)' : ' (Excl. GST)'}\n\nValid until: ${validStr ?? '30 days from date'}\n\nBest regards,\nSidharth Trading Co.\nPONGS Stretch Ceiling`)}`
+  const mailUrl = `mailto:${quote.clientEmail ?? ''}?subject=Quotation ${quote.quoteNumber} – ${co.name}&body=${encodeURIComponent(`Dear ${quote.clientName},\n\nPlease find attached our quotation ${quote.quoteNumber} for ${quote.projectName || 'your project'}.\n\nGrand Total: ${fmtINR(bd.grandTotal)}${quote.includeGst ? ' (Incl. GST)' : ' (Excl. GST)'}\n\nValid until: ${validStr ?? '30 days from date'}\n\nBest regards,\n${co.name}`)}`
 
   const tcPoints = [
     'Order: Once placed cannot be modified, exchanged or cancelled.',
     `Validity: This quotation is valid for 30 days${validStr ? ` (until ${validStr})` : ''}, subject to availability of material at the time of placing the order.`,
     'Due to the customised nature of the product, 100% downpayment is required along with the confirmed Purchase Order.',
-    'NEFT / RTGS to be made in the name of: Next Level Solutions.',
+    `NEFT / RTGS to be made in the name of: ${co.bank?.accountName ?? co.name}.`,
     'Electrical point to be provided nearest to the area where ceiling installation work is to be done.',
     'Delivery within 10 to 12 working days from confirmed PO and payment receipt.',
     'No measurement changes will be entertained once installation is complete.',
@@ -146,8 +153,8 @@ export default async function ClientPage({ params }: { params: { id: string } })
                 <div style={{ width: '80px', height: '1px', backgroundColor: 'rgba(255,255,255,0.25)' }} />
               </div>
               <div style={{ textAlign: 'right' }}>
-                <p style={{ fontSize: '20px', fontWeight: 900, color: 'white', letterSpacing: '-0.02em', lineHeight: 1 }}>PONGS</p>
-                <p style={{ fontSize: '7px', fontWeight: 700, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.4em', marginTop: '3px' }}>INDIA</p>
+                <p style={{ fontSize: '20px', fontWeight: 900, color: 'white', letterSpacing: '-0.02em', lineHeight: 1 }}>{co.logoText}</p>
+                <p style={{ fontSize: '7px', fontWeight: 700, color: 'rgba(255,255,255,0.5)', letterSpacing: '0.25em', marginTop: '3px' }}>{co.tagline?.toUpperCase()}</p>
               </div>
             </div>
 
@@ -217,10 +224,10 @@ export default async function ClientPage({ params }: { params: { id: string } })
             {/* Footer */}
             <div style={{ marginTop: '36px', paddingTop: '16px', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <p style={{ fontSize: '9px', color: 'rgba(255,255,255,0.3)', letterSpacing: '0.15em', fontWeight: 600 }}>
-                STRETCH CEILING SYSTEMS &nbsp;·&nbsp; BENGALURU, KARNATAKA
+                {co.address.toUpperCase()} &nbsp;·&nbsp; {co.city.toUpperCase()}
               </p>
               <p style={{ fontSize: '9px', color: 'rgba(255,255,255,0.3)', letterSpacing: '0.1em' }}>
-                Sidharth Trading Co.
+                {co.name}
               </p>
             </div>
           </div>
@@ -234,11 +241,10 @@ export default async function ClientPage({ params }: { params: { id: string } })
           {/* Page header */}
           <div style={{ backgroundColor: '#111', padding: '14px 48px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <p style={{ fontSize: '9px', color: 'rgba(255,255,255,0.5)', letterSpacing: '0.12em', fontWeight: 600 }}>
-              PONGS INDIA &nbsp;·&nbsp; Stretch Ceiling Systems &nbsp;·&nbsp; Bengaluru
+              {co.name.toUpperCase()} &nbsp;·&nbsp; Stretch Ceiling Systems &nbsp;·&nbsp; {co.city.split(',')[0]}
             </p>
             <div>
-              <span style={{ fontSize: '15px', fontWeight: 900, color: 'white', letterSpacing: '-0.02em' }}>PONGS</span>
-              <span style={{ fontSize: '7px', fontWeight: 700, color: 'rgba(255,255,255,0.45)', letterSpacing: '0.35em', marginLeft: '4px' }}>INDIA</span>
+              <span style={{ fontSize: '15px', fontWeight: 900, color: 'white', letterSpacing: '-0.02em' }}>{co.logoText}</span>
             </div>
           </div>
 
@@ -262,7 +268,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
                     ['Quotation No.', quote.quoteNumber],
                     ['Date', dateStr],
                     ...(validStr ? [['Valid Until', validStr]] : []),
-                    ['Sales Rep', 'Sidharth'],
+                    ['Company', co.name],
                   ].map(([label, value]) => (
                     <div key={label}>
                       <p style={{ fontSize: '9px', color: '#999', marginBottom: '2px' }}>{label}</p>
@@ -431,10 +437,11 @@ export default async function ClientPage({ params }: { params: { id: string } })
               <p style={{ fontSize: '10px', fontWeight: 700, color: '#111', marginBottom: '10px', letterSpacing: '0.05em' }}>Banking Details</p>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 24px' }}>
                 {[
-                  ['Bank Name', 'HDFC Bank'],
-                  ['Account Name', 'Next Level Solutions'],
-                  ['Account Number', '• • • • • • • • 1234'],
-                  ['IFSC Code', 'HDFC0001234'],
+                  ['Bank Name', co.bank?.name ?? '—'],
+                  ['Account Name', co.bank?.accountName ?? co.name],
+                  ['Account Number', co.bank?.accountNumber ?? '—'],
+                  ['IFSC Code', co.bank?.ifsc ?? '—'],
+                  ...(co.gstin ? [['GSTIN', co.gstin]] : []),
                 ].map(([label, value]) => (
                   <p key={label} style={{ fontSize: '10px', color: '#555' }}>
                     <span style={{ fontWeight: 700, color: '#111' }}>{label}: </span>{value}
@@ -448,7 +455,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
               <div style={{ textAlign: 'center', minWidth: '180px' }}>
                 <div style={{ height: '44px', borderBottom: '1px solid #111', marginBottom: '8px' }} />
                 <p style={{ fontSize: '10px', fontWeight: 700, color: '#111' }}>Authority Signature</p>
-                <p style={{ fontSize: '10px', color: '#888', marginTop: '2px' }}>Sidharth Trading Co.</p>
+                <p style={{ fontSize: '10px', color: '#888', marginTop: '2px' }}>{co.name}</p>
               </div>
             </div>
 
@@ -474,8 +481,8 @@ export default async function ClientPage({ params }: { params: { id: string } })
             backgroundColor: '#F5F4F2',
           }}>
             <div>
-              <p style={{ fontSize: '10px', color: '#888' }}>Sidharth Trading Co. &nbsp;·&nbsp; Bengaluru, Karnataka</p>
-              <p style={{ fontSize: '9px', color: '#aaa', marginTop: '2px' }}>Authorised PONGS Partner</p>
+              <p style={{ fontSize: '10px', color: '#888' }}>{co.name} &nbsp;·&nbsp; {co.city}</p>
+              <p style={{ fontSize: '9px', color: '#aaa', marginTop: '2px' }}>{co.email} · {co.phone}</p>
             </div>
             <p style={{ fontSize: '9px', color: '#aaa', letterSpacing: '0.1em' }}>{quote.quoteNumber}</p>
           </div>

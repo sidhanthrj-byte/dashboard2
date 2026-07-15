@@ -6,22 +6,31 @@
 * { box-sizing: border-box; }
 
 :root {
-  --ink: #0c0e12;
-  --ink-2: #1e2330;
-  --ink-3: #374151;
-  --muted: #6b7280;
-  --subtle: #9ca3af;
-  --border: #e5e7eb;
-  --border-light: #f3f4f6;
-  --surface: #ffffff;
-  --bg: #f5f6f8;
-  --accent: #111827;
-  --accent-hover: #1f2937;
+  /* Text hierarchy */
+  --ink: #0a0a0a;          /* primary — almost black */
+  --ink-2: #1c1917;
+  --ink-3: #44403c;
+  --muted: #78716c;        /* secondary — warm neutral gray */
+  --subtle: #a8a29e;       /* muted — soft warm gray */
+  /* Surfaces */
+  --border: #ececea;       /* extremely subtle */
+  --border-light: #f5f5f4;
+  --surface: #ffffff;      /* cards — pure white */
+  --bg: #fafaf9;           /* soft warm off-white */
+  --bg-2: #f5f5f4;         /* secondary background */
+  /* Accents (used sparingly) */
+  --accent: #047857;       /* deep emerald — primary */
+  --accent-hover: #065f46;
+  --accent-soft: #ecfdf5;
   --emerald: #059669;
+  --slate: #475569;        /* secondary accent */
   --blue: #2563eb;
   --violet: #7c3aed;
   --rose: #e11d48;
   --amber: #d97706;
+  /* Motion */
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 body {
@@ -30,36 +39,43 @@ body {
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.011em;
 }
 
 @layer components {
   .btn {
-    @apply inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer select-none leading-none;
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 cursor-pointer select-none leading-none active:scale-[0.98];
   }
   .btn-primary {
-    @apply btn bg-gray-900 hover:bg-gray-800 text-white focus:ring-gray-700 shadow-sm;
+    @apply btn text-white shadow-sm;
+    background: var(--accent);
   }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-primary:focus-visible { --tw-ring-color: var(--accent); }
   .btn-secondary {
-    @apply btn bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 hover:border-gray-300 focus:ring-gray-200 shadow-sm;
+    @apply btn bg-white border border-stone-200 text-stone-700 hover:bg-stone-50 hover:border-stone-300 focus-visible:ring-stone-300 shadow-sm;
   }
   .btn-danger {
-    @apply btn bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 focus:ring-rose-200;
+    @apply btn bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 focus-visible:ring-rose-200;
   }
   .btn-ghost {
-    @apply btn text-gray-500 hover:bg-gray-100 hover:text-gray-800 focus:ring-gray-200;
+    @apply btn text-stone-500 hover:bg-stone-100 hover:text-stone-800 focus-visible:ring-stone-200;
   }
   .card {
-    @apply bg-white rounded-2xl border border-gray-200/70 shadow-[0_1px_3px_0_rgb(0,0,0,0.05),0_1px_2px_-1px_rgb(0,0,0,0.05)];
+    @apply bg-white rounded-2xl border shadow-[0_1px_2px_0_rgb(0,0,0,0.03),0_1px_3px_0_rgb(0,0,0,0.04)];
+    border-color: var(--border);
   }
   .card-hover {
-    @apply card hover:shadow-[0_4px_12px_0_rgb(0,0,0,0.08),0_2px_6px_-2px_rgb(0,0,0,0.06)] hover:border-gray-300/80 transition-all duration-200;
+    @apply card transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_24px_-6px_rgb(0,0,0,0.10),0_2px_6px_-2px_rgb(0,0,0,0.05)];
   }
+  .card-hover:hover { border-color: #e2e0dd; }
   .input {
-    @apply w-full px-3.5 py-2.5 text-sm rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-gray-900/20 focus:border-gray-400 placeholder:text-gray-400 transition-all;
+    @apply w-full px-3.5 py-2.5 text-sm rounded-xl border bg-white focus:outline-none focus:ring-2 placeholder:text-stone-400 transition-all;
+    border-color: var(--border);
   }
+  .input:focus { --tw-ring-color: rgba(4,120,87,0.18); border-color: #6ee7b7; }
   .label {
-    @apply block text-[11px] font-semibold text-gray-500 uppercase tracking-widest mb-1.5;
+    @apply block text-[11px] font-semibold text-stone-500 uppercase tracking-widest mb-1.5;
   }
   .select {
     @apply input appearance-none cursor-pointer;
@@ -67,7 +83,7 @@ body {
   .badge {
     @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold tracking-wide;
   }
-  .badge-draft     { @apply badge bg-gray-100 text-gray-600; }
+  .badge-draft     { @apply badge bg-stone-100 text-stone-600; }
   .badge-sent      { @apply badge bg-blue-50 text-blue-700; }
   .badge-approved  { @apply badge bg-emerald-50 text-emerald-700; }
   .badge-rejected  { @apply badge bg-rose-50 text-rose-600; }
@@ -76,14 +92,37 @@ body {
   .badge-specifiors { @apply badge bg-amber-50 text-amber-700; }
 
   .stat-card {
-    @apply card p-5 relative overflow-hidden;
+    @apply card p-5 relative overflow-hidden transition-all duration-200 hover:shadow-[0_8px_24px_-6px_rgb(0,0,0,0.08)];
   }
 }
 
-::-webkit-scrollbar { width: 4px; height: 4px; }
+/* Premium motion primitives */
+@keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+@keyframes slideUp { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: translateY(0) } }
+@keyframes scaleIn { from { opacity: 0; transform: scale(0.97) } to { opacity: 1; transform: scale(1) } }
+@keyframes shimmer { 100% { transform: translateX(100%) } }
+.animate-fade-in { animation: fadeIn 0.25s var(--ease) both; }
+.animate-slide-up { animation: slideUp 0.32s var(--ease-out) both; }
+.animate-scale-in { animation: scaleIn 0.2s var(--ease-out) both; }
+
+/* Shimmer skeleton */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-2);
+}
+.skeleton::after {
+  content: '';
+  position: absolute; inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent);
+  animation: shimmer 1.5s infinite;
+}
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 99px; }
-::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+::-webkit-scrollbar-thumb { background: #d6d3d1; border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: #a8a29e; }
 
 /* Mobile PDF viewer — horizontally scrollable with proportional scale hint */
 .pdf-mobile-outer {
