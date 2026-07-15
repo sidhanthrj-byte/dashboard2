@@ -1,10 +1,14 @@
 'use client'
 
-import { Trash2, ChevronDown, ChevronUp } from 'lucide-react'
+import { Trash2, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react'
 import { useState, useMemo } from 'react'
-import type { CeilingItem, ShapeType, LightType, GripperType, LEDWidth, UnitSystem, SurfaceType, JointType } from '@/lib/types'
-import { FABRIC } from '@/lib/pricing'
+import type { CeilingItem, ShapeType, LightType, GripperType, LEDWidth, UnitSystem, SurfaceType, JointType, LightingConfig, DriverMode } from '@/lib/types'
+import { FABRIC, STANDARD_DRIVERS } from '@/lib/pricing'
 import { calculateItem, fmtINR, round2 } from '@/lib/calculations'
+
+// Manual driver selection applies to light types powered by standard CV drivers.
+// DALI variants use fixed dedicated drivers and stay automatic.
+const MANUAL_DRIVER_TYPES: LightType[] = ['single_color', 'tunable', 'rgb', 'rgbw']
 
 const FABRIC_OPTIONS = Object.keys(FABRIC)
 
@@ -40,6 +44,9 @@ export function defaultItem(id: string): CeilingItem {
     jointType: 'none',
     jointPosition: 0,
     notes: '',
+    lightingConfig: 'non-looped',
+    driverMode: 'auto',
+    manualDrivers: {},
   }
 }
 
@@ -404,6 +411,82 @@ export default function CeilingItemForm({ item, index, priceTier, onChange, onRe
                   {stripCount} strip{stripCount !== 1 ? 's' : ''} at {item.lightDepth}" depth
                 </p>
               </div>
+              {/* Looped / Non-Looped — how multiple pieces are wired */}
+              <div>
+                <label className="label">Lighting Configuration</label>
+                <div className="flex gap-2">
+                  {([
+                    { v: 'non-looped', label: 'Non-Looped', note: 'Each piece independent' },
+                    { v: 'looped', label: 'Looped', note: 'One continuous system' },
+                  ] as { v: LightingConfig; label: string; note: string }[]).map(o => (
+                    <button key={o.v} type="button"
+                      onClick={() => set('lightingConfig', o.v)}
+                      className={`px-4 py-2 rounded-lg border text-left transition-all ${
+                        (item.lightingConfig ?? 'non-looped') === o.v
+                          ? 'border-slate-700 bg-slate-800 text-white'
+                          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                      }`}>
+                      <span className="text-sm font-medium block">{o.label}</span>
+                      <span className={`text-xs ${(item.lightingConfig ?? 'non-looped') === o.v ? 'text-slate-300' : 'text-slate-400'}`}>{o.note}</span>
+                    </button>
+                  ))}
+                </div>
+                {(item.lightingConfig ?? 'non-looped') === 'looped' && item.quantity > 1 && (
+                  <p className="text-xs text-slate-500 mt-1.5">
+                    All {item.quantity} pieces are treated as one lighting system — drivers are selected once from the combined wattage, usually needing fewer drivers.
+                  </p>
+                )}
+              </div>
+
+              {/* Driver selection: Auto Best Mix or Manual */}
+              {MANUAL_DRIVER_TYPES.includes(item.lightType) && (
+                <div>
+                  <label className="label">Driver Selection</label>
+                  <div className="flex gap-2">
+                    {([
+                      { v: 'auto', label: 'Auto Best Mix', note: 'Prefers 200W drivers' },
+                      { v: 'manual', label: 'Manual', note: 'Pick drivers yourself' },
+                    ] as { v: DriverMode; label: string; note: string }[]).map(o => (
+                      <button key={o.v} type="button"
+                        onClick={() => set('driverMode', o.v)}
+                        className={`px-4 py-2 rounded-lg border text-left transition-all ${
+                          (item.driverMode ?? 'auto') === o.v
+                            ? 'border-slate-700 bg-slate-800 text-white'
+                            : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                        }`}>
+                        <span className="text-sm font-medium block">{o.label}</span>
+                        <span className={`text-xs ${(item.driverMode ?? 'auto') === o.v ? 'text-slate-300' : 'text-slate-400'}`}>{o.note}</span>
+                      </button>
+                    ))}
+                  </div>
+                  {(item.driverMode ?? 'auto') === 'manual' && (
+                    <div className="mt-3">
+                      <p className="text-xs text-slate-500 mb-2">Driver counts for the whole item (all pieces):</p>
+                      <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
+                        {Object.keys(STANDARD_DRIVERS).map(name => (
+                          <div key={name}>
+                            <span className="text-xs text-slate-500 block mb-1 text-center">{name}</span>
+                            <input type="number" min={0} className="input text-center px-1"
+                              value={item.manualDrivers?.[name] || ''}
+                              placeholder="0"
+                              onChange={e => set('manualDrivers', {
+                                ...(item.manualDrivers ?? {}),
+                                [name]: Math.max(0, parseInt(e.target.value) || 0),
+                              })} />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {preview?.driverWarning && (
+                    <div className="mt-3 p-3 rounded-lg bg-amber-50 border border-amber-200 flex items-start gap-2 text-xs text-amber-700">
+                      <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+                      <span>{preview.driverWarning} <span className="text-amber-500">You can still continue and save.</span></span>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div>
                 <label className="label">LED Module Width</label>
                 <div className="flex gap-2">
@@ -435,7 +518,8 @@ export default function CeilingItemForm({ item, index, priceTier, onChange, onRe
               {preview.ledDetail && (
                 <p>• LED: {preview.ledDetail.stripCount} strip{preview.ledDetail.stripCount > 1 ? 's' : ''} × {preview.ledDetail.runningLengthM.toFixed(2)}m = {preview.ledDetail.totalRunningMeters} mtr running | {preview.ledDetail.totalWatts}W total</p>
               )}
-              <p>• Gripper: {round2(preview.perimeterM).toFixed(2)} rmt {item.gripperType}</p>
+              {/* Gripper is sold in 1m lengths — show the rounded-up qty actually costed */}
+              <p>• Gripper: {preview.lineItems.find(l => l.description.includes('Gripper'))?.qty ?? Math.ceil(round2(preview.perimeterM))} rmt {item.gripperType} (perimeter {round2(preview.perimeterM).toFixed(2)} m, rounded up per 1m length)</p>
               <p className="font-semibold pt-1">Item subtotal: {fmtINR(preview.subtotalFinal)} + {fmtINR(preview.installationCost)} install</p>
             </div>
           )}

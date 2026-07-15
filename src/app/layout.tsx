@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import UserMenu from '@/components/UserMenu'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -32,6 +33,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 className="btn-primary text-xs px-4 py-2 gap-1.5">
                 <span className="text-base leading-none font-light">+</span> New Quote
               </a>
+              <UserMenu />
             </nav>
           </div>
         </header>

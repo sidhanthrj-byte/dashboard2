@@ -7,6 +7,19 @@ export type LEDWidth = 'standard' | 'wider'
 export type SurfaceType = 'ceiling' | 'wall'
 export type JointType = 'none' | 'center' | 'off-center'
 export type QuoteDisplayMode = 'total' | 'per-sqft'
+// Looped = all pieces of a multi-quantity item wired as ONE continuous lighting
+// system (drivers sized on combined wattage). Non-looped = each piece independent.
+export type LightingConfig = 'non-looped' | 'looped'
+export type DriverMode = 'auto' | 'manual'
+export type UserRole = 'admin' | 'user'
+
+export interface AppUser {
+  id: string
+  name: string
+  email: string
+  role: UserRole
+  createdAt: string
+}
 
 export interface TwoDims { dim1: number; dim2: number }
 export interface CircleDims { diameter: number }
@@ -32,6 +45,12 @@ export interface CeilingItem {
   jointType: JointType
   jointPosition: number
   notes: string
+  /** Looped vs non-looped lighting system (default non-looped = legacy behaviour) */
+  lightingConfig?: LightingConfig
+  /** Auto Best Mix (default) or manual driver selection */
+  driverMode?: DriverMode
+  /** Manual driver counts by driver name (e.g. { '200W': 2 }) — total for the whole item */
+  manualDrivers?: Record<string, number>
 }
 
 export interface Quote {
@@ -54,6 +73,12 @@ export interface Quote {
   notes: string
   createdAt: string
   updatedAt: string
+  /** Issuing company (STC / NLS). Older quotes have none → treated as STC. */
+  company?: string
+  /** Owner: user id + display name of the employee who created the quote */
+  createdBy?: string | null
+  createdByName?: string | null
+  status?: string
 }
 
 export interface LineItem {
@@ -97,9 +122,15 @@ export interface FabricDetail {
 export interface LEDDetail {
   stripCount: number
   runningLengthM: number
+  /** Running metres across ALL pieces (per-piece × quantity) */
   totalRunningMeters: number
+  /** Wattage across ALL pieces — drivers/costing/UI/PDF all use this value */
   totalWatts: number
   stripSpacingInches: number
+  /** Per-piece values, kept for display */
+  perPieceRunningMeters: number
+  perPieceWatts: number
+  lightingConfig: LightingConfig
 }
 
 export interface ItemBreakdown {
@@ -115,6 +146,8 @@ export interface ItemBreakdown {
   ledDetail: LEDDetail | null
   lineItems: LineItem[]
   installationCost: number
+  /** Advisory (non-blocking) warning when manual driver capacity exceeds auto mix by >30% */
+  driverWarning?: string | null
   subtotalDealer: number
   subtotalTier: number
   subtotalFinal: number

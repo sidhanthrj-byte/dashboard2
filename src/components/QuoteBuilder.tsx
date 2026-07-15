@@ -6,6 +6,7 @@ import { v4 as uuid } from 'uuid'
 import { useRouter } from 'next/navigation'
 import CeilingItemForm, { defaultItem } from './CeilingItemForm'
 import type { Quote, CeilingItem, PriceTier, QuoteDisplayMode } from '@/lib/types'
+import { COMPANIES, COMPANY_IDS, DEFAULT_COMPANY, type CompanyId } from '@/lib/companies'
 import { calculateQuote, fmtINR } from '@/lib/calculations'
 import { listClients, saveClient, deleteClient, type SavedClient } from '@/lib/clients'
 
@@ -23,6 +24,7 @@ export default function QuoteBuilder({ initial, mode }: Props) {
   const validUntil = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0]
 
   const [meta, setMeta] = useState({
+    company: ((initial?.company as CompanyId) ?? DEFAULT_COMPANY) as CompanyId,
     clientName: initial?.clientName ?? '',
     clientEmail: initial?.clientEmail ?? '',
     clientPhone: initial?.clientPhone ?? '',
@@ -182,6 +184,31 @@ export default function QuoteBuilder({ initial, mode }: Props) {
             <span className="w-5 h-5 rounded-full bg-slate-800 text-white text-xs font-bold flex items-center justify-center">1</span>
             Project Details
           </h2>
+
+          {/* Issuing company — required; determines all branding on the quotation */}
+          <div className="mb-5">
+            <label className="label">Quoting Company *</label>
+            <div className="grid grid-cols-2 gap-3 max-w-md">
+              {COMPANY_IDS.map(id => {
+                const c = COMPANIES[id]
+                const active = meta.company === id
+                return (
+                  <button key={id} type="button"
+                    onClick={() => setMeta(m => ({ ...m, company: id }))}
+                    className={`p-3 rounded-xl border text-left transition-all ${
+                      active ? 'border-slate-700 bg-slate-800' : 'border-slate-200 hover:border-slate-300'
+                    }`}>
+                    <div className={`font-semibold text-sm ${active ? 'text-white' : 'text-slate-800'}`}>{c.name}</div>
+                    <div className={`text-xs mt-0.5 ${active ? 'text-slate-300' : 'text-slate-500'}`}>{c.legalName}</div>
+                  </button>
+                )
+              })}
+            </div>
+            <p className="text-xs text-slate-400 mt-1.5">
+              The quotation PDF will use {COMPANIES[meta.company].legalName} branding. Products and pricing are identical for both.
+            </p>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="label">Client Name *</label>
@@ -374,8 +401,13 @@ export default function QuoteBuilder({ initial, mode }: Props) {
                 )}
                 <p className="text-xs text-slate-400 mt-2">
                   {meta.markupPercent > 0 ? `+${meta.markupPercent}% markup · ` : ''}
-                  {meta.includeGst ? 'Incl. GST 18%' : 'Excl. GST'}
+                  {meta.includeGst ? 'Incl. GST 18%' : 'Excl. GST'} · {meta.company}
                 </p>
+                {preview.itemBreakdowns.some(b => b.driverWarning) && (
+                  <div className="mt-3 p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-700">
+                    ⚠ Manual driver selection exceeds the recommended automatic configuration by more than 30% on one or more items. You can still save — this is advisory only.
+                  </div>
+                )}
               </>
             ) : (
               <p className="text-sm text-slate-400">Add items to see summary</p>

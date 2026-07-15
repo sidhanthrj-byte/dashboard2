@@ -234,11 +234,64 @@ function ledKey(item: CeilingItem): string {
   return item.ledWidth === 'wider' ? 'Wider Single Colour' : 'Single Colour'
 }
 
+// ─── Auto Best Mix ───────────────────────────────────────────────────────────
+// Preferred driver is 200W. 600W drivers run hot, need active (fan) cooling and
+// are noisy, so the auto algorithm NEVER selects them — a combination of 200W
+// drivers can always cover any load. Manual mode still allows 600W and the
+// user's choice is always respected.
+const AUTO_DRIVER_POOL = Object.entries(STANDARD_DRIVERS)
+  .filter(([name]) => name !== '600W')
+  .sort((a, b) => a[1].watts - b[1].watts)
+
+/** Returns { driverName: count } covering `requiredWatts` (already incl. headroom). */
+export function autoDriverMix(requiredWatts: number): Record<string, number> {
+  const mix: Record<string, number> = {}
+  if (requiredWatts <= 0) return mix
+  // Single driver that fits (smallest sufficient, up to 400W) wins on driver count
+  const single = AUTO_DRIVER_POOL.find(([, s]) => s.watts >= requiredWatts)
+  if (single) return { [single[0]]: 1 }
+  // Otherwise: fill with 200W drivers, then one smaller driver for the remainder
+  const w200 = STANDARD_DRIVERS['200W'].watts
+  const full = Math.floor(requiredWatts / w200)
+  mix['200W'] = full
+  const rem = requiredWatts - full * w200
+  if (rem > 0) {
+    const fit = AUTO_DRIVER_POOL.find(([, s]) => s.watts >= rem)!
+    mix[fit[0]] = (mix[fit[0]] ?? 0) + 1
+  }
+  return mix
+}
+
+export function mixCapacity(mix: Record<string, number>): number {
+  return Object.entries(mix).reduce(
+    (s, [name, qty]) => s + (STANDARD_DRIVERS[name]?.watts ?? 0) * qty, 0)
+}
+
+function driverMixLines(mix: Record<string, number>, tier: PriceTier, suffix = ''): LineItem[] {
+  return Object.entries(mix)
+    .filter(([, qty]) => qty > 0)
+    .map(([name, qty]) => {
+      const spec = STANDARD_DRIVERS[name]
+      return {
+        description: `${name} Driver${suffix}`,
+        qty, unit: 'nos',
+        dealerRate: spec.price.dealer, tierRate: p(spec.price, tier),
+        dealerAmount: qty * spec.price.dealer, tierAmount: qty * p(spec.price, tier),
+      }
+    })
+}
+
+interface DriverOptions {
+  /** Manual driver counts (whole item). When set, overrides Auto Best Mix. */
+  manualMix?: Record<string, number> | null
+}
+
 function buildDriverLines(
   totalWatts: number,
   lightType: string,
   tier: PriceTier,
   runningMeters: number,
+  opts: DriverOptions = {},
 ): LineItem[] {
   const items: LineItem[] = []
   const required = totalWatts * 1.2
@@ -264,23 +317,10 @@ function buildDriverLines(
     items.push(...controlAndRemote('tunable', tier))
   } else if (lightType === 'tunable') {
     // Standard tunable: standard drivers + Power Repeater SC + Controller Tunable
-    const sorted = Object.entries(STANDARD_DRIVERS).sort((a, b) => a[1].watts - b[1].watts)
-    const counts: Record<string, number> = {}
-    let rem = required
-    while (rem > 0) {
-      const fit = sorted.find(([, s]) => s.watts >= rem)
-      if (fit) { counts[fit[0]] = (counts[fit[0]] || 0) + 1; rem = 0 }
-      else { const lg = sorted[sorted.length - 1]; counts[lg[0]] = (counts[lg[0]] || 0) + 1; rem -= lg[1].watts }
-    }
-    for (const [name, qty] of Object.entries(counts)) {
-      const spec = STANDARD_DRIVERS[name]
-      items.push({
-        description: `${name} Driver`,
-        qty, unit: 'nos',
-        dealerRate: spec.price.dealer, tierRate: p(spec.price, tier),
-        dealerAmount: qty * spec.price.dealer, tierAmount: qty * p(spec.price, tier),
-      })
-    }
+    const mix = opts.manualMix && Object.values(opts.manualMix).some(v => v > 0)
+      ? opts.manualMix
+      : autoDriverMix(required)
+    items.push(...driverMixLines(mix, tier))
     // Power Repeater Single Colour for tunable (per spec)
     const rep = CONTROLS['Power Repeater Single Colour']
     items.push({
@@ -310,23 +350,10 @@ function buildDriverLines(
     items.push(...controlAndRemote('single', tier))
   } else {
     // Single colour / RGB / RGBW — standard CV drivers
-    const sorted = Object.entries(STANDARD_DRIVERS).sort((a, b) => a[1].watts - b[1].watts)
-    const counts: Record<string, number> = {}
-    let rem = required
-    while (rem > 0) {
-      const fit = sorted.find(([, s]) => s.watts >= rem)
-      if (fit) { counts[fit[0]] = (counts[fit[0]] || 0) + 1; rem = 0 }
-      else { const lg = sorted[sorted.length - 1]; counts[lg[0]] = (counts[lg[0]] || 0) + 1; rem -= lg[1].watts }
-    }
-    for (const [name, qty] of Object.entries(counts)) {
-      const spec = STANDARD_DRIVERS[name]
-      items.push({
-        description: `${name} Driver`,
-        qty, unit: 'nos',
-        dealerRate: spec.price.dealer, tierRate: p(spec.price, tier),
-        dealerAmount: qty * spec.price.dealer, tierAmount: qty * p(spec.price, tier),
-      })
-    }
+    const mix = opts.manualMix && Object.values(opts.manualMix).some(v => v > 0)
+      ? opts.manualMix
+      : autoDriverMix(required)
+    items.push(...driverMixLines(mix, tier))
     if (lightType === 'rgb' || lightType === 'rgbw') {
       items.push(...controlAndRemote('tunable', tier))
     } else if (lightType === 'single_color') {
@@ -368,49 +395,58 @@ export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: 
   const geo = getGeometry(item)
   const { widthM, lengthM, areaM2, perimeterM } = geo
   const lineItems: LineItem[] = []
+  // All line items below carry TOTAL quantities (per piece × item quantity) so
+  // the displayed qty, the costing, the PDF and any reports always agree.
+  const qty = Math.max(1, item.quantity || 1)
+  const qtySuffix = qty > 1 ? ` (×${qty} pcs)` : ''
 
   // Fabric — pass raw dimensions so computeFabricDetail can pick orientation by joint type
   const fabricDetail = computeFabricDetail(geo.dim1M, geo.dim2M, item)
   const fabPrice = FABRIC[item.fabricType] ?? FABRIC['Descor Premium']
+  const fabricQty = round2(fabricDetail.totalBilledArea * qty)
   lineItems.push({
-    description: `${item.fabricType} Fabric [${fabricDetail.panels[0]?.orientation ?? ''}, waste ${fabricDetail.totalWastageArea.toFixed(2)} sqm]`,
-    qty: round2(fabricDetail.totalBilledArea),
+    description: `${item.fabricType} Fabric [${fabricDetail.panels[0]?.orientation ?? ''}, waste ${fabricDetail.totalWastageArea.toFixed(2)} sqm]${qtySuffix}`,
+    qty: fabricQty,
     unit: 'sqm',
     dealerRate: fabPrice.dealer, tierRate: p(fabPrice, tier),
-    dealerAmount: round2(fabricDetail.totalBilledArea * fabPrice.dealer),
-    tierAmount:   round2(fabricDetail.totalBilledArea * p(fabPrice, tier)),
+    dealerAmount: round2(fabricQty * fabPrice.dealer),
+    tierAmount:   round2(fabricQty * p(fabPrice, tier)),
   })
 
   if (item.withPrinting) {
+    const printQty = round2(areaM2 * qty)
     lineItems.push({
-      description: 'Printing Charges',
-      qty: round2(areaM2), unit: 'sqm',
+      description: `Printing Charges${qtySuffix}`,
+      qty: printQty, unit: 'sqm',
       dealerRate: PRINTING.dealer, tierRate: p(PRINTING, tier),
-      dealerAmount: round2(areaM2 * PRINTING.dealer),
-      tierAmount:   round2(areaM2 * p(PRINTING, tier)),
+      dealerAmount: round2(printQty * PRINTING.dealer),
+      tierAmount:   round2(printQty * p(PRINTING, tier)),
     })
   }
 
   if (item.withFleece) {
+    const fleeceQty = round2(areaM2 * qty)
     lineItems.push({
-      description: 'Felt Pad / Fleece',
-      qty: round2(areaM2), unit: 'sqm',
+      description: `Felt Pad / Fleece${qtySuffix}`,
+      qty: fleeceQty, unit: 'sqm',
       dealerRate: FLEECE.dealer, tierRate: p(FLEECE, tier),
-      dealerAmount: round2(areaM2 * FLEECE.dealer),
-      tierAmount:   round2(areaM2 * p(FLEECE, tier)),
+      dealerAmount: round2(fleeceQty * FLEECE.dealer),
+      tierAmount:   round2(fleeceQty * p(FLEECE, tier)),
     })
   }
 
-  // Gripper
-  let gripQty = Math.ceil(perimeterM * 10) / 10
+  // Gripper — supplied only in 1-metre lengths, so the per-piece requirement is
+  // ALWAYS rounded UP to the next whole metre (business rule, applies globally).
+  let gripPerPiece = perimeterM
   // Add gripper for joint line if jointed
   if (fabricDetail.hasJoint) {
-    gripQty = round2(gripQty + widthM)
+    gripPerPiece += widthM
   }
+  const gripQty = Math.ceil(round2(gripPerPiece)) * qty
   const gripPrice = GRIPPER[item.gripperType] ?? GRIPPER['CW']
   lineItems.push({
-    description: `${item.gripperType} Gripper${fabricDetail.hasJoint ? ' (incl. joint line)' : ''}`,
-    qty: round2(gripQty), unit: 'rmt',
+    description: `${item.gripperType} Gripper${fabricDetail.hasJoint ? ' (incl. joint line)' : ''}${qtySuffix}`,
+    qty: gripQty, unit: 'rmt',
     dealerRate: gripPrice.dealer, tierRate: p(gripPrice, tier),
     dealerAmount: round2(gripQty * gripPrice.dealer),
     tierAmount:   round2(gripQty * p(gripPrice, tier)),
@@ -418,7 +454,9 @@ export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: 
 
   // LED
   let ledDetail: LEDDetail | null = null
+  let driverWarning: string | null = null
   if (item.lightType !== 'none') {
+    const lightingConfig = item.lightingConfig ?? 'non-looped'
     const depthIn = item.lightDepth ?? 6
     const stripSpacingInches = depthIn  // spacing between strips = depth
     const spacingMM = depthIn * 25.4    // convert inches to mm
@@ -426,29 +464,68 @@ export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: 
     const widthMM = widthM * 1000
     const stripCount = Math.ceil(widthMM / spacingMM) + 1
     const runningLengthM = lengthM
-    const totalRunningMeters = round2(stripCount * runningLengthM)
-    const totalWatts = round2(totalRunningMeters * LED_WATTS_PER_M)
-    ledDetail = { stripCount, runningLengthM, totalRunningMeters, totalWatts, stripSpacingInches }
+    const perPieceRunningMeters = round2(stripCount * runningLengthM)
+    const perPieceWatts = round2(perPieceRunningMeters * LED_WATTS_PER_M)
+    const totalRunningMeters = round2(perPieceRunningMeters * qty)
+    const totalWatts = round2(perPieceWatts * qty)
+    ledDetail = {
+      stripCount, runningLengthM, totalRunningMeters, totalWatts,
+      stripSpacingInches, perPieceRunningMeters, perPieceWatts, lightingConfig,
+    }
 
     const lKey = ledKey(item)
     const ledPrice = LED[lKey]
     lineItems.push({
-      description: `LED ${lKey} [${stripCount} strips × ${runningLengthM.toFixed(2)}m · ${LED_WATTS_PER_M}W/m = ${totalWatts}W total]`,
+      description: `LED ${lKey} [${stripCount} strips × ${runningLengthM.toFixed(2)}m · ${LED_WATTS_PER_M}W/m = ${totalWatts}W total]${qtySuffix}`,
       qty: totalRunningMeters, unit: 'mtr',
       dealerRate: ledPrice.dealer, tierRate: p(ledPrice, tier),
       dealerAmount: round2(totalRunningMeters * ledPrice.dealer),
       tierAmount:   round2(totalRunningMeters * p(ledPrice, tier)),
     })
 
-    lineItems.push(...buildDriverLines(totalWatts, item.lightType, tier, totalRunningMeters))
+    const manualMix = (item.driverMode ?? 'auto') === 'manual' ? item.manualDrivers ?? null : null
+
+    if (lightingConfig === 'looped' || qty === 1 || manualMix) {
+      // LOOPED (or single piece, or explicit manual selection): all pieces are one
+      // continuous system — sum LED modules → total wattage → ONE driver selection.
+      lineItems.push(...buildDriverLines(totalWatts, item.lightType, tier, totalRunningMeters, { manualMix }))
+    } else {
+      // NON-LOOPED (legacy): each piece is independent. Drivers are sized per piece
+      // and every driver/controller line is multiplied by the quantity so displayed
+      // quantities always match what is actually costed.
+      const perPieceLines = buildDriverLines(perPieceWatts, item.lightType, tier, perPieceRunningMeters)
+      lineItems.push(...perPieceLines.map(l => ({
+        ...l,
+        description: `${l.description}${qtySuffix}`,
+        qty: l.qty * qty,
+        dealerAmount: round2(l.dealerAmount * qty),
+        tierAmount: round2(l.tierAmount * qty),
+      })))
+    }
+
+    // Advisory warning: manual driver capacity vs Auto Best Mix capacity (>30% over).
+    if (manualMix && Object.values(manualMix).some(v => v > 0)) {
+      const manualCapacity = mixCapacity(manualMix)
+      const required = totalWatts * 1.2
+      const autoCapacity = lightingConfig === 'looped' || qty === 1
+        ? mixCapacity(autoDriverMix(required))
+        : mixCapacity(autoDriverMix(perPieceWatts * 1.2)) * qty
+      if (autoCapacity > 0 && manualCapacity > autoCapacity * 1.3) {
+        driverWarning =
+          `Manual driver selection (${manualCapacity}W) exceeds the recommended automatic configuration ` +
+          `(${autoCapacity}W) by more than 30%. This may increase project cost unnecessarily. ` +
+          `Recommended configuration: Auto Best Mix.`
+      }
+    }
   }
 
+  // Line items already include quantity — do NOT multiply again.
   const subtotalDealer = lineItems.reduce((s, l) => s + l.dealerAmount, 0)
   const subtotalTier   = lineItems.reduce((s, l) => s + l.tierAmount,   0)
 
   const rate = installRate ?? INSTALLATION_RATE_PER_SQFT
-  const installationCost = round2(areaM2 * SQFT_PER_SQM * rate * item.quantity)
-  const subtotalFinal = round2(subtotalTier * item.quantity)
+  const installationCost = round2(areaM2 * SQFT_PER_SQM * rate * qty)
+  const subtotalFinal = round2(subtotalTier)
 
   return {
     item,
@@ -463,8 +540,9 @@ export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: 
     ledDetail,
     lineItems,
     installationCost,
-    subtotalDealer: round2(subtotalDealer * item.quantity),
-    subtotalTier:   round2(subtotalTier   * item.quantity),
+    driverWarning,
+    subtotalDealer: round2(subtotalDealer),
+    subtotalTier:   round2(subtotalTier),
     subtotalFinal,
     itemTotal: round2(subtotalFinal + installationCost),
   }

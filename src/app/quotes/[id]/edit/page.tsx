@@ -1,11 +1,14 @@
 import { dbGetQuote } from "@/lib/db"
 export const dynamic = 'force-dynamic'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import QuoteBuilder from '@/components/QuoteBuilder'
+import { getSession, canAccessQuote } from '@/lib/auth'
 
 export default async function EditQuotePage({ params }: { params: { id: string } }) {
+  const session = await getSession()
+  if (!session) redirect('/login')
   const quote = await dbGetQuote(params.id)
-  if (!quote) notFound()
+  if (!quote || !canAccessQuote(session, quote)) notFound()
 
   return (
     <div>

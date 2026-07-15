@@ -2,6 +2,8 @@ import { dbGetQuote } from "@/lib/db"
 export const dynamic = 'force-dynamic'
 import { notFound } from 'next/navigation'
 import { calculateQuote, fmtINR, formatDims, round2 } from '@/lib/calculations'
+import { getSession, canAccessQuote } from '@/lib/auth'
+import { getCompany } from '@/lib/companies'
 import { Edit, Users } from 'lucide-react'
 import PrintButton from '@/components/PrintButton'
 import SharePDF from '@/components/SharePDF'
@@ -22,8 +24,12 @@ const lightLabel: Record<string, string> = {
 }
 
 export default async function ClientPage({ params }: { params: { id: string } }) {
+  const session = await getSession()
+  if (!session) redirect('/login')
   const quote = await dbGetQuote(params.id)
-  if (!quote) notFound()
+  if (!quote || !canAccessQuote(session, quote)) notFound()
+  // All company identity/branding on this document comes from the quote's company
+  const company = getCompany(quote.company)
 
   const bd = calculateQuote(quote)
 
@@ -41,14 +47,16 @@ export default async function ClientPage({ params }: { params: { id: string } })
   const hasPrinting = quote.items.some(i => i.withPrinting)
 
   const waMessage = encodeURIComponent(
-    `*PONGS Stretch Ceiling – Quotation*\n\n` +
-    `*Quote:* ${quote.quoteNumber}\n*Client:* ${quote.clientName}\n` +
-    `*Project:* ${quote.projectName || '—'}\n*Date:* ${dateStr}\n\n` +
+    `*${company.brand} Stretch Ceiling – Quotation*\n\n` +
+    `*Quote:* ${quote.quoteNumber}\n` +
+    `*Client:* ${quote.clientName}\n` +
+    `*Project:* ${quote.projectName || '—'}\n` +
+    `*Date:* ${dateStr}\n\n` +
     `*Grand Total: ${fmtINR(bd.grandTotal)}*${quote.includeGst ? ' (Incl. GST)' : ' (Excl. GST)'}\n\n` +
-    `_Sidharth Trading Co. | PONGS Stretch Ceiling_`
+    `_${company.legalName} | ${company.brand} Stretch Ceiling_`
   )
-  const waUrl = `https://wa.me/${quote.clientPhone ? quote.clientPhone.replace(/\D/g, '') : ''}?text=${waMessage}`
-  const mailUrl = `mailto:${quote.clientEmail ?? ''}?subject=Quotation ${quote.quoteNumber} – PONGS Stretch Ceiling&body=${encodeURIComponent(`Dear ${quote.clientName},\n\nPlease find attached our quotation ${quote.quoteNumber} for ${quote.projectName || 'your project'}.\n\nGrand Total: ${fmtINR(bd.grandTotal)}${quote.includeGst ? ' (Incl. GST)' : ' (Excl. GST)'}\n\nValid until: ${validStr ?? '30 days from date'}\n\nBest regards,\nSidharth Trading Co.\nPONGS Stretch Ceiling`)}`
+  const waUrl = `https://wa.me/${ quote.clientPhone ? quote.clientPhone.replace(/\D/g,'') : ''}?text=${waMessage}`
+  const mailUrl = `mailto:${quote.clientEmail ?? ''}?subject=Quotation ${quote.quoteNumber} - ${company.brand} Stretch Ceiling&body=${encodeURIComponent(`Dear ${quote.clientName},\n\nPlease find attached our quotation ${quote.quoteNumber} for ${quote.projectName || 'your project'}.\n\nGrand Total: ${fmtINR(bd.grandTotal)}${quote.includeGst ? ' (Incl. GST)' : ' (Excl. GST)'}\n\nValid until: ${validStr ?? '30 days from date'}\n\nBest regards,\n${company.legalName}\n${company.brand} Stretch Ceiling`)}`
 
   const tcPoints = [
     'Order: Once placed cannot be modified, exchanged or cancelled.',
