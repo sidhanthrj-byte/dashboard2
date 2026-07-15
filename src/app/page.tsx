@@ -213,16 +213,16 @@ export default function HomePage() {
                 bg: 'bg-violet-50',
               },
             ].map(s => (
-              <div key={s.label} className="card p-5">
-                <div className="flex items-start justify-between mb-3">
+              <div key={s.label} className="stat-card group">
+                <div className="flex items-start justify-between mb-3.5">
                   <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${s.bg}`}>
                     <span className={s.color}>{s.icon}</span>
                   </div>
-                  <ArrowUpRight size={13} className="text-gray-300 mt-0.5" />
+                  <ArrowUpRight size={14} className="text-gray-300 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-gray-400" />
                 </div>
-                <p className="text-xl font-black text-gray-900 tracking-tight leading-none mb-1">{s.value}</p>
-                <p className="text-[11px] text-gray-400 font-medium">{s.label}</p>
-                <p className="text-[10px] text-gray-300 mt-0.5">{s.sub}</p>
+                <p className="stat-value text-[22px] font-black text-gray-900 tracking-tightest leading-none mb-1.5">{s.value}</p>
+                <p className="text-[11px] text-gray-500 font-semibold">{s.label}</p>
+                <p className="text-[11px] text-gray-400 mt-0.5 nums">{s.sub}</p>
               </div>
             ))}
           </div>
