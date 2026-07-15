@@ -1,14 +1,19 @@
 import { dbGetQuote } from "@/lib/db"
 export const dynamic = 'force-dynamic'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { calculateQuote, fmtINR, formatDims, round2 } from '@/lib/calculations'
+import { getSession, canAccessQuote } from '@/lib/auth'
+import { getCompany } from '@/lib/companies'
 import type { ItemBreakdown } from '@/lib/types'
-import { Edit, Eye } from 'lucide-react'
+import { Edit, Eye, AlertTriangle } from 'lucide-react'
 import PrintButton from '@/components/PrintButton'
 
 export default async function TeamPage({ params }: { params: { id: string } }) {
+  const session = await getSession()
+  if (!session) redirect('/login')
   const quote = await dbGetQuote(params.id)
-  if (!quote) notFound()
+  if (!quote || !canAccessQuote(session, quote)) notFound()
+  const company = getCompany(quote.company)
 
   const bd = calculateQuote(quote)
   const margin = bd.materialsTotalFinal - bd.materialsTotalDealer
@@ -52,7 +57,13 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
                 INTERNAL · {quote.priceTier.toUpperCase()}
                 {quote.markupPercent > 0 ? ` +${quote.markupPercent}%` : ''}
               </span>
+              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${company.badgeClass}`}>
+                {company.name} · {company.legalName}
+              </span>
               <span className="text-slate-400 text-xs">{quote.quoteNumber}</span>
+              {quote.createdByName && (
+                <span className="text-slate-400 text-xs">by {quote.createdByName}</span>
+              )}
             </div>
             <h1 className="text-xl font-bold text-slate-900">{quote.clientName}</h1>
             <p className="text-slate-600 text-sm">{quote.projectName}</p>
@@ -224,10 +235,25 @@ function ItemBreakdownCard({ bd, index, installRate }: { bd: ItemBreakdown; inde
       {bd.ledDetail && (
         <div className="px-6 py-3 bg-slate-50 border-b border-slate-100 text-xs text-slate-600 flex flex-wrap gap-4">
           <span><strong>Cove depth:</strong> {item.lightDepth}"</span>
-          <span><strong>Strips:</strong> {bd.ledDetail.stripCount}</span>
+          <span><strong>Strips:</strong> {bd.ledDetail.stripCount}{qty > 1 ? ' / pc' : ''}</span>
           <span><strong>Strip length:</strong> {bd.ledDetail.runningLengthM.toFixed(2)}m</span>
-          <span><strong>Total LED:</strong> {bd.ledDetail.totalRunningMeters} mtr running</span>
-          <span><strong>Load:</strong> {bd.ledDetail.totalWatts}W</span>
+          <span><strong>Total LED:</strong> {bd.ledDetail.totalRunningMeters} mtr running{qty > 1 ? ` (all ${qty} pcs)` : ''}</span>
+          <span><strong>Load:</strong> {bd.ledDetail.totalWatts}W total</span>
+          {qty > 1 && (
+            <span className="font-medium text-slate-700">
+              {bd.ledDetail.lightingConfig === 'looped'
+                ? 'Looped — one continuous system, drivers sized on combined wattage'
+                : 'Non-looped — each piece driven independently'}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Manual driver advisory warning (non-blocking) */}
+      {bd.driverWarning && (
+        <div className="px-6 py-3 bg-amber-50 border-b border-amber-100 text-xs text-amber-700 flex items-start gap-2">
+          <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+          <span>{bd.driverWarning}</span>
         </div>
       )}
 

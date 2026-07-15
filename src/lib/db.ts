@@ -40,18 +40,93 @@ export async function initQuotesTable() {
       updated_at TEXT DEFAULT (datetime('now'))
     )
   `)
-  // Migrate: add status column if it doesn't exist yet
-  try {
-    await db.execute(`ALTER TABLE pongs_quotes ADD COLUMN status TEXT DEFAULT 'draft'`)
-  } catch {
-    // Column already exists — ignore
+  // Migrate: add columns that may not exist on older tables
+  const migrations = [
+    `ALTER TABLE pongs_quotes ADD COLUMN status TEXT DEFAULT 'draft'`,
+    // Multi-company support: which company (STC/NLS) the quote is issued from
+    `ALTER TABLE pongs_quotes ADD COLUMN company TEXT DEFAULT 'STC'`,
+    // Ownership: the employee (user id + display name) who created the quote
+    `ALTER TABLE pongs_quotes ADD COLUMN created_by TEXT`,
+    `ALTER TABLE pongs_quotes ADD COLUMN created_by_name TEXT`,
+  ]
+  for (const sql of migrations) {
+    try { await db.execute(sql) } catch { /* column already exists — ignore */ }
   }
 }
 
-export async function dbListQuotes(): Promise<Quote[]> {
+export async function initUsersTable() {
+  const db = getClient()
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS pongs_users (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'user',
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `)
+}
+
+export interface DbUser {
+  id: string
+  name: string
+  email: string
+  passwordHash: string
+  role: 'admin' | 'user'
+  createdAt: string
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function rowToUser(row: any): DbUser {
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    email: String(row.email),
+    passwordHash: String(row.password_hash),
+    role: row.role === 'admin' ? 'admin' : 'user',
+    createdAt: String(row.created_at ?? ''),
+  }
+}
+
+export async function dbGetUserByEmail(email: string): Promise<DbUser | null> {
+  await initUsersTable()
+  const db = getClient()
+  const r = await db.execute('SELECT * FROM pongs_users WHERE email = ?', [email.toLowerCase()])
+  return r.rows.length ? rowToUser(r.rows[0]) : null
+}
+
+export async function dbListUsers(): Promise<Omit<DbUser, 'passwordHash'>[]> {
+  await initUsersTable()
+  const db = getClient()
+  const r = await db.execute('SELECT * FROM pongs_users ORDER BY created_at ASC')
+  return r.rows.map(rowToUser).map(({ passwordHash: _ph, ...u }) => u)
+}
+
+export async function dbCountUsers(): Promise<number> {
+  await initUsersTable()
+  const db = getClient()
+  const r = await db.execute('SELECT COUNT(*) AS n FROM pongs_users')
+  return Number(r.rows[0]?.n ?? 0)
+}
+
+export async function dbCreateUser(u: { id: string; name: string; email: string; passwordHash: string; role: 'admin' | 'user' }) {
+  await initUsersTable()
+  const db = getClient()
+  await db.execute(
+    'INSERT INTO pongs_users (id, name, email, password_hash, role) VALUES (?,?,?,?,?)',
+    [u.id, u.name, u.email.toLowerCase(), u.passwordHash, u.role],
+  )
+}
+
+// Owner filtering happens here at the database level so no API path can leak
+// another employee's quotations. Pass ownerId only for non-admin users.
+export async function dbListQuotes(ownerId?: string): Promise<Quote[]> {
   await initQuotesTable()
   const db = getClient()
-  const result = await db.execute('SELECT * FROM pongs_quotes ORDER BY created_at DESC')
+  const result = ownerId
+    ? await db.execute('SELECT * FROM pongs_quotes WHERE created_by = ? ORDER BY created_at DESC', [ownerId])
+    : await db.execute('SELECT * FROM pongs_quotes ORDER BY created_at DESC')
   return result.rows.map(rowToQuote) as unknown as Quote[]
 }
 
@@ -90,14 +165,17 @@ export async function dbSaveQuote(quote: Record<string, unknown>) {
     (quote.clientEmail as string) ?? null,
     (quote.clientPhone as string) ?? null,
     String((quote.status as string) ?? 'draft'),
+    String((quote.company as string) ?? 'STC'),
+    (quote.createdBy as string) ?? null,
+    (quote.createdByName as string) ?? null,
     String(quote.createdAt ?? now),
     now,
   ]
   await db.execute(
     `INSERT INTO pongs_quotes (id, quote_number, client_name, project_name, location, date, valid_until,
       price_tier, markup_percent, installation_rate, transport_cost, include_gst, display_mode,
-      items_json, notes, grand_total, client_email, client_phone, status, created_at, updated_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      items_json, notes, grand_total, client_email, client_phone, status, company, created_by, created_by_name, created_at, updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       ON CONFLICT(id) DO UPDATE SET
         client_name=excluded.client_name, project_name=excluded.project_name,
         location=excluded.location, date=excluded.date, valid_until=excluded.valid_until,
@@ -106,7 +184,10 @@ export async function dbSaveQuote(quote: Record<string, unknown>) {
         include_gst=excluded.include_gst, display_mode=excluded.display_mode,
         items_json=excluded.items_json, notes=excluded.notes, grand_total=excluded.grand_total,
         client_email=excluded.client_email, client_phone=excluded.client_phone,
-        status=excluded.status, updated_at=excluded.updated_at`,
+        status=excluded.status, company=excluded.company,
+        created_by=COALESCE(pongs_quotes.created_by, excluded.created_by),
+        created_by_name=COALESCE(pongs_quotes.created_by_name, excluded.created_by_name),
+        updated_at=excluded.updated_at`,
     args,
   )
 }
@@ -151,6 +232,9 @@ function rowToQuote(row: any): Record<string, unknown> {
     clientEmail: row.client_email,
     clientPhone: row.client_phone,
     status: row.status ?? 'draft',
+    company: row.company ?? 'STC',
+    createdBy: row.created_by ?? null,
+    createdByName: row.created_by_name ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }

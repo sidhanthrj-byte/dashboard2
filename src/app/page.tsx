@@ -7,8 +7,9 @@ import {
   CheckCircle2, SendHorizontal, XCircle, AlertCircle, ChevronDown,
   ArrowUpRight, Filter,
 } from 'lucide-react'
-import type { Quote } from '@/lib/types'
+import type { Quote, UserRole } from '@/lib/types'
 import { fmtINR, calculateQuote } from '@/lib/calculations'
+import { COMPANIES, COMPANY_IDS, DEFAULT_COMPANY, getCompany, type CompanyId } from '@/lib/companies'
 
 const TIER_LABEL: Record<string, string> = { dealer: 'Dealer', msp: 'MSP', specifiors: 'Specifiors' }
 const TIER_CLASS: Record<string, string> = { dealer: 'badge-dealer', msp: 'badge-msp', specifiors: 'badge-specifiors' }
@@ -48,6 +49,14 @@ export default function HomePage() {
   const [deleting, setDeleting] = useState<string | null>(null)
   const [duplicating, setDuplicating] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<QuoteStatus | 'all'>('all')
+  const [companyFilter, setCompanyFilter] = useState<CompanyId | 'all'>('all')
+  const [me, setMe] = useState<{ name: string; role: UserRole } | null>(null)
+
+  useEffect(() => {
+    fetch('/api/auth/me').then(r => (r.ok ? r.json() : null)).then(setMe).catch(() => null)
+  }, [])
+  // Standard users get a personal workspace ("My Quotes"); admins see everything.
+  const my = me && me.role !== 'admin' ? 'My ' : ''
 
   const fetchQuotes = useCallback(async (q = '') => {
     setLoading(true)
@@ -63,7 +72,17 @@ export default function HomePage() {
     return () => clearTimeout(t)
   }, [search, fetchQuotes])
 
-  const totals = quotes.reduce((acc, q) => {
+  // Company scoping — all stats below respect the STC/NLS filter
+  const quoteCompany = (q: Quote): CompanyId => (q.company as CompanyId) ?? DEFAULT_COMPANY
+  const scoped = companyFilter === 'all' ? quotes : quotes.filter(q => quoteCompany(q) === companyFilter)
+  const byCompany = COMPANY_IDS.map(id => {
+    const list = quotes.filter(q => quoteCompany(q) === id)
+    const value = list.reduce((s, q) => { try { return s + calculateQuote(q).grandTotal } catch { return s } }, 0)
+    const pending = list.filter(q => ['draft', 'sent'].includes(getStatus(q))).length
+    return { id, count: list.length, value, pending }
+  })
+
+  const totals = scoped.reduce((acc, q) => {
     try {
       const bd = calculateQuote(q)
       acc.value += bd.grandTotal
@@ -74,24 +93,24 @@ export default function HomePage() {
   }, { value: 0, sqft: 0, count: 0 })
 
   const avgQuoteValue = totals.count > 0 ? totals.value / totals.count : 0
-  const byTier = quotes.reduce<Record<string, number>>((acc, q) => {
+  const byTier = scoped.reduce<Record<string, number>>((acc, q) => {
     acc[q.priceTier] = (acc[q.priceTier] ?? 0) + 1; return acc
   }, {})
   const thisMonth = new Date().toISOString().slice(0, 7)
-  const thisMonthQuotes = quotes.filter(q => q.date?.startsWith(thisMonth))
+  const thisMonthQuotes = scoped.filter(q => q.date?.startsWith(thisMonth))
   const thisMonthValue = thisMonthQuotes.reduce((s, q) => { try { return s + calculateQuote(q).grandTotal } catch { return s } }, 0)
-  const locCount = quotes.reduce<Record<string, number>>((acc, q) => {
+  const locCount = scoped.reduce<Record<string, number>>((acc, q) => {
     if (q.location) acc[q.location] = (acc[q.location] ?? 0) + 1; return acc
   }, {})
   const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0]
-  const recentCount = quotes.filter(q => q.date >= sevenDaysAgo).length
-  const approvedValue = quotes.filter(q => getStatus(q) === 'approved')
+  const recentCount = scoped.filter(q => q.date >= sevenDaysAgo).length
+  const approvedValue = scoped.filter(q => getStatus(q) === 'approved')
     .reduce((s, q) => { try { return s + calculateQuote(q).grandTotal } catch { return s } }, 0)
-  const conversionRate = quotes.length > 0
-    ? Math.round((quotes.filter(q => getStatus(q) === 'approved').length / quotes.length) * 100)
+  const conversionRate = scoped.length > 0
+    ? Math.round((scoped.filter(q => getStatus(q) === 'approved').length / scoped.length) * 100)
     : 0
 
-  const filtered = statusFilter === 'all' ? quotes : quotes.filter(q => getStatus(q) === statusFilter)
+  const filtered = statusFilter === 'all' ? scoped : scoped.filter(q => getStatus(q) === statusFilter)
 
   async function updateStatus(id: string, status: QuoteStatus) {
     const quote = quotes.find(q => q.id === id)
@@ -140,10 +159,13 @@ export default function HomePage() {
       {/* Page header */}
       <div className="flex items-center justify-between pt-1">
         <div>
-          <h1 className="text-2xl font-black text-gray-900 tracking-tight">Dashboard</h1>
+          <h1 className="text-2xl font-black text-gray-900 tracking-tight">
+            {me && me.role !== 'admin' ? `${me.name.split(' ')[0]}'s Workspace` : 'Dashboard'}
+          </h1>
           <p className="text-sm text-gray-400 mt-0.5 font-medium">
-            {loading ? 'Loading…' : `${quotes.length} quote${quotes.length !== 1 ? 's' : ''}`}
+            {loading ? 'Loading…' : `${scoped.length} ${my.toLowerCase()}quote${scoped.length !== 1 ? 's' : ''}`}
             {!loading && recentCount > 0 && ` · ${recentCount} this week`}
+            {companyFilter !== 'all' && ` · ${companyFilter} only`}
           </p>
         </div>
         <a href="/quotes/new" className="btn-primary gap-2">
@@ -151,22 +173,53 @@ export default function HomePage() {
         </a>
       </div>
 
+      {/* Company filter — STC / NLS / All */}
+      {!loading && quotes.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          {(['all', ...COMPANY_IDS] as (CompanyId | 'all')[]).map(c => (
+            <button key={c} onClick={() => setCompanyFilter(c)}
+              className={`px-3.5 py-1.5 rounded-full border text-xs font-semibold transition-all ${
+                companyFilter === c
+                  ? 'border-gray-900 bg-gray-900 text-white'
+                  : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
+              }`}>
+              {c === 'all' ? 'All Companies' : `${c} · ${COMPANIES[c as CompanyId].legalName}`}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Stats Grid */}
       {showStats && (
         <div className="space-y-4">
+          {/* Per-company breakdown */}
+          <div className="grid grid-cols-2 gap-3">
+            {byCompany.map(c => (
+              <button key={c.id} onClick={() => setCompanyFilter(prev => prev === c.id ? 'all' : c.id)}
+                className={`card p-5 text-left transition-all ${companyFilter === c.id ? 'ring-2 ring-gray-900' : 'hover:shadow-md'}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${COMPANIES[c.id].badgeClass}`}>{c.id}</span>
+                  <span className="text-[10px] text-gray-400">{COMPANIES[c.id].legalName}</span>
+                </div>
+                <p className="text-xl font-black text-gray-900 leading-none">{c.count} <span className="text-xs font-semibold text-gray-400">{my.toLowerCase()}quotes</span></p>
+                <p className="text-[11px] text-gray-400 mt-1.5">{fmtINR(c.value)} revenue · {c.pending} pending</p>
+              </button>
+            ))}
+          </div>
+
           {/* Primary stats */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {[
               {
-                label: 'Total Quotes',
-                value: quotes.length,
+                label: `${my}Quotes`,
+                value: scoped.length,
                 sub: `avg ${fmtINR(avgQuoteValue)}`,
                 icon: <Hash size={16} />,
                 color: 'text-gray-600',
                 bg: 'bg-gray-100',
               },
               {
-                label: 'Pipeline',
+                label: `${my}Pipeline`,
                 value: fmtINR(totals.value),
                 sub: `${totals.sqft.toFixed(0)} sqft total`,
                 icon: <TrendingUp size={16} />,
@@ -174,7 +227,7 @@ export default function HomePage() {
                 bg: 'bg-blue-50',
               },
               {
-                label: 'Won Value',
+                label: `${my}Won Value`,
                 value: fmtINR(approvedValue),
                 sub: `${conversionRate}% conversion`,
                 icon: <CheckCircle2 size={16} />,
@@ -390,6 +443,11 @@ function QuoteCard({ quote, deleting, duplicating, onDelete, onDuplicate, onStat
             )}
           </div>
 
+          {/* Issuing company badge */}
+          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${getCompany(quote.company).badgeClass}`}>
+            {getCompany(quote.company).name}
+          </span>
+
           {grandTotal > 0 && (
             <span className="font-black text-gray-900 text-sm">{fmtINR(grandTotal)}</span>
           )}
@@ -409,6 +467,7 @@ function QuoteCard({ quote, deleting, duplicating, onDelete, onDuplicate, onStat
             </span>
           )}
           {quote.includeGst && <span className="text-gray-300">GST incl.</span>}
+          {quote.createdByName && <span className="text-gray-300">by {quote.createdByName}</span>}
         </div>
       </div>
 

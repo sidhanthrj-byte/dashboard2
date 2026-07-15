@@ -1,7 +1,9 @@
 import { dbGetQuote } from "@/lib/db"
 export const dynamic = 'force-dynamic'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { calculateQuote, fmtINR, formatDims, round2 } from '@/lib/calculations'
+import { getSession, canAccessQuote } from '@/lib/auth'
+import { getCompany } from '@/lib/companies'
 import { Edit, Users } from 'lucide-react'
 import PrintButton from '@/components/PrintButton'
 import SharePDF from '@/components/SharePDF'
@@ -22,8 +24,12 @@ const lightLabel: Record<string, string> = {
 }
 
 export default async function ClientPage({ params }: { params: { id: string } }) {
+  const session = await getSession()
+  if (!session) redirect('/login')
   const quote = await dbGetQuote(params.id)
-  if (!quote) notFound()
+  if (!quote || !canAccessQuote(session, quote)) notFound()
+  // All company identity/branding on this document comes from the quote's company
+  const company = getCompany(quote.company)
 
   const bd = calculateQuote(quote)
 
@@ -41,20 +47,22 @@ export default async function ClientPage({ params }: { params: { id: string } })
   const hasPrinting = quote.items.some(i => i.withPrinting)
 
   const waMessage = encodeURIComponent(
-    `*PONGS Stretch Ceiling – Quotation*\n\n` +
-    `*Quote:* ${quote.quoteNumber}\n*Client:* ${quote.clientName}\n` +
-    `*Project:* ${quote.projectName || '—'}\n*Date:* ${dateStr}\n\n` +
+    `*${company.brand} Stretch Ceiling – Quotation*\n\n` +
+    `*Quote:* ${quote.quoteNumber}\n` +
+    `*Client:* ${quote.clientName}\n` +
+    `*Project:* ${quote.projectName || '—'}\n` +
+    `*Date:* ${dateStr}\n\n` +
     `*Grand Total: ${fmtINR(bd.grandTotal)}*${quote.includeGst ? ' (Incl. GST)' : ' (Excl. GST)'}\n\n` +
-    `_Sidharth Trading Co. | PONGS Stretch Ceiling_`
+    `_${company.legalName} | ${company.brand} Stretch Ceiling_`
   )
-  const waUrl = `https://wa.me/${quote.clientPhone ? quote.clientPhone.replace(/\D/g, '') : ''}?text=${waMessage}`
-  const mailUrl = `mailto:${quote.clientEmail ?? ''}?subject=Quotation ${quote.quoteNumber} – PONGS Stretch Ceiling&body=${encodeURIComponent(`Dear ${quote.clientName},\n\nPlease find attached our quotation ${quote.quoteNumber} for ${quote.projectName || 'your project'}.\n\nGrand Total: ${fmtINR(bd.grandTotal)}${quote.includeGst ? ' (Incl. GST)' : ' (Excl. GST)'}\n\nValid until: ${validStr ?? '30 days from date'}\n\nBest regards,\nSidharth Trading Co.\nPONGS Stretch Ceiling`)}`
+  const waUrl = `https://wa.me/${ quote.clientPhone ? quote.clientPhone.replace(/\D/g,'') : ''}?text=${waMessage}`
+  const mailUrl = `mailto:${quote.clientEmail ?? ''}?subject=Quotation ${quote.quoteNumber} - ${company.brand} Stretch Ceiling&body=${encodeURIComponent(`Dear ${quote.clientName},\n\nPlease find attached our quotation ${quote.quoteNumber} for ${quote.projectName || 'your project'}.\n\nGrand Total: ${fmtINR(bd.grandTotal)}${quote.includeGst ? ' (Incl. GST)' : ' (Excl. GST)'}\n\nValid until: ${validStr ?? '30 days from date'}\n\nBest regards,\n${company.legalName}\n${company.brand} Stretch Ceiling`)}`
 
   const tcPoints = [
     'Order: Once placed cannot be modified, exchanged or cancelled.',
     `Validity: This quotation is valid for 30 days${validStr ? ` (until ${validStr})` : ''}, subject to availability of material at the time of placing the order.`,
     'Due to the customised nature of the product, 100% downpayment is required along with the confirmed Purchase Order.',
-    'NEFT / RTGS to be made in the name of: Next Level Solutions.',
+    `NEFT / RTGS to be made in the name of: ${company.legalName}.`,
     'Electrical point to be provided nearest to the area where ceiling installation work is to be done.',
     'Delivery within 10 to 12 working days from confirmed PO and payment receipt.',
     'No measurement changes will be entertained once installation is complete.',
@@ -294,7 +302,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
                   </p>
                   <p style={{ fontSize: '11px', color: '#555' }}>Name: Sidharth</p>
                   <p style={{ fontSize: '11px', color: '#555' }}>Phone: +91 98765 43210</p>
-                  <p style={{ fontSize: '11px', color: '#555' }}>Email: info@pongsindia.com</p>
+                  <p style={{ fontSize: '11px', color: '#555' }}>Email: {company.email}</p>
                 </div>
                 <div style={{ border: '1px solid #E5E5E5', borderRadius: '8px', padding: '16px' }}>
                   <p style={{ fontSize: '11px', color: '#555', marginBottom: '4px' }}>
@@ -493,7 +501,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
                 {[
                   ['Bank Name', 'HDFC Bank'],
-                  ['Account Name', 'Next Level Solutions'],
+                  ['Account Name', company.legalName],
                   ['Account Number', '• • • • • • • • 1234'],
                   ['IFSC Code', 'HDFC0001234'],
                 ].map(([label, value]) => (
@@ -509,7 +517,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
               <div style={{ textAlign: 'center' }}>
                 <div style={{ width: '160px', height: '40px', borderBottom: '1px solid #111', marginBottom: '8px' }} />
                 <p style={{ fontSize: '11px', fontWeight: 700, color: '#111' }}>Authority Signature</p>
-                <p style={{ fontSize: '10px', color: '#777', marginTop: '2px' }}>Sidharth Trading Co.</p>
+                <p style={{ fontSize: '10px', color: '#777', marginTop: '2px' }}>{company.legalName}</p>
               </div>
             </div>
 
@@ -624,7 +632,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
           {/* Bottom left footer */}
           <div style={{ position: 'absolute', bottom: '36px', left: '60px' }}>
             <p style={{ fontSize: '10px', color: '#999', letterSpacing: '0.1em' }}>
-              Sidharth Trading Co. &nbsp;·&nbsp; Bengaluru, Karnataka
+              {company.legalName} &nbsp;·&nbsp; {company.address}
             </p>
           </div>
         </div>
