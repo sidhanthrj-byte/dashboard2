@@ -1,41 +1,17 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import {
-  Search, FileText, Plus, Trash2, Eye, Users, Calendar, MapPin,
-  Copy, TrendingUp, Hash, IndianRupee, Edit3,
-  CheckCircle2, SendHorizontal, XCircle, AlertCircle, ChevronDown,
-  ArrowUpRight, Filter,
-} from 'lucide-react'
+import { Search, Plus, Trash2, Copy, ChevronDown, Check } from 'lucide-react'
 import type { Quote } from '@/lib/types'
 import { fmtINR, calculateQuote } from '@/lib/calculations'
 import { listCompanies } from '@/lib/companies'
 
 const TIER_LABEL: Record<string, string> = { dealer: 'Dealer', msp: 'MSP', specifiors: 'Specifiors' }
-const TIER_CLASS: Record<string, string> = { dealer: 'badge-dealer', msp: 'badge-msp', specifiors: 'badge-specifiors' }
 
 type QuoteStatus = 'draft' | 'sent' | 'approved' | 'rejected'
 const STATUS_LABELS: Record<QuoteStatus, string> = { draft: 'Draft', sent: 'Sent', approved: 'Approved', rejected: 'Rejected' }
-const STATUS_CLASS: Record<QuoteStatus, string> = {
-  draft: 'badge-draft', sent: 'badge-sent', approved: 'badge-approved', rejected: 'badge-rejected',
-}
-const STATUS_ICONS: Record<QuoteStatus, React.ReactNode> = {
-  draft: <AlertCircle size={10} />,
-  sent: <SendHorizontal size={10} />,
-  approved: <CheckCircle2 size={10} />,
-  rejected: <XCircle size={10} />,
-}
-const STATUS_COLORS: Record<QuoteStatus, string> = {
-  draft: 'bg-gray-100 text-gray-700',
-  sent: 'bg-blue-50 text-blue-700',
-  approved: 'bg-emerald-50 text-emerald-700',
-  rejected: 'bg-rose-50 text-rose-600',
-}
-const STATUS_ICON_COLORS: Record<QuoteStatus, string> = {
-  draft: 'bg-gray-100 text-gray-500',
-  sent: 'bg-blue-50 text-blue-600',
-  approved: 'bg-emerald-50 text-emerald-600',
-  rejected: 'bg-rose-50 text-rose-500',
+const STATUS_DOT: Record<QuoteStatus, string> = {
+  draft: 'var(--faint)', sent: 'var(--slate)', approved: 'var(--forest)', rejected: 'var(--accent)',
 }
 
 function getStatus(quote: Quote): QuoteStatus {
@@ -81,16 +57,9 @@ export default function HomePage() {
     return acc
   }, { value: 0, sqft: 0, count: 0 })
 
-  const avgQuoteValue = totals.count > 0 ? totals.value / totals.count : 0
-  const byTier = quotes.reduce<Record<string, number>>((acc, q) => {
-    acc[q.priceTier] = (acc[q.priceTier] ?? 0) + 1; return acc
-  }, {})
   const thisMonth = new Date().toISOString().slice(0, 7)
-  const thisMonthQuotes = quotes.filter(q => q.date?.startsWith(thisMonth))
-  const thisMonthValue = thisMonthQuotes.reduce((s, q) => { try { return s + calculateQuote(q).grandTotal } catch { return s } }, 0)
-  const locCount = quotes.reduce<Record<string, number>>((acc, q) => {
-    if (q.location) acc[q.location] = (acc[q.location] ?? 0) + 1; return acc
-  }, {})
+  const thisMonthValue = quotes.filter(q => q.date?.startsWith(thisMonth))
+    .reduce((s, q) => { try { return s + calculateQuote(q).grandTotal } catch { return s } }, 0)
   const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0]
   const recentCount = quotes.filter(q => q.date >= sevenDaysAgo).length
   const approvedValue = quotes.filter(q => getStatus(q) === 'approved')
@@ -99,7 +68,11 @@ export default function HomePage() {
     ? Math.round((quotes.filter(q => getStatus(q) === 'approved').length / quotes.length) * 100)
     : 0
 
+  const statusCounts = (['draft', 'sent', 'approved', 'rejected'] as QuoteStatus[])
+    .map(s => ({ s, n: quotes.filter(q => getStatus(q) === s).length }))
+
   const filtered = statusFilter === 'all' ? quotes : quotes.filter(q => getStatus(q) === statusFilter)
+  const showStats = !loading && quotes.length > 0 && !search
 
   async function updateStatus(id: string, status: QuoteStatus) {
     const quote = quotes.find(q => q.id === id)
@@ -140,217 +113,127 @@ export default function HomePage() {
     window.location.href = `/quotes/${created.id}/edit`
   }
 
-  const showStats = !loading && quotes.length > 0 && !search
+  const companies = [{ id: 'all', label: 'All' }, ...listCompanies().map(c => ({ id: c.id, label: c.shortName }))]
+  const firstName = me?.name ? me.name.split(' ')[0] : null
+
+  const metrics = [
+    { label: isAdmin ? 'Quotes on file' : 'My quotes', value: String(quotes.length) },
+    { label: 'Pipeline', value: fmtINR(totals.value) },
+    { label: 'Won', value: fmtINR(approvedValue), meta: `${conversionRate}% conv.` },
+    { label: 'This month', value: fmtINR(thisMonthValue) },
+  ]
 
   return (
-    <div className="space-y-6">
+    <div className="animate-fade-in">
 
-      {/* Page header */}
-      <div className="flex items-center justify-between pt-1">
+      {/* Register header */}
+      <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-5 pt-8 sm:pt-12 pb-7">
         <div>
-          <h1 className="text-2xl font-black text-gray-900 tracking-tight">
-            {isAdmin ? 'Dashboard' : `${me?.name ? me.name.split(' ')[0] + '’s' : 'My'} Workspace`}
+          <div className="eyebrow mb-2.5">Register</div>
+          <h1 className="font-display text-[32px] sm:text-[38px] font-semibold leading-none tracking-tight" style={{ color: 'var(--ink)' }}>
+            {isAdmin ? 'Quotations' : firstName ? `${firstName}’s desk` : 'My quotations'}
           </h1>
-          <p className="text-sm text-gray-400 mt-0.5 font-medium">
-            {loading ? 'Loading…' : `${quotes.length} ${isAdmin ? 'quote' : 'of my quote'}${quotes.length !== 1 ? 's' : ''}`}
-            {!loading && recentCount > 0 && ` · ${recentCount} this week`}
+          <p className="text-[14px] mt-3" style={{ color: 'var(--muted)' }}>
+            {loading ? 'Loading…'
+              : quotes.length === 0 ? 'No records yet'
+              : `${quotes.length} record${quotes.length !== 1 ? 's' : ''}${recentCount > 0 ? ` · ${recentCount} this week` : ''}`}
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          {/* Company filter — All / STC / NLS */}
-          <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">
-            {[{ id: 'all', label: 'All' }, ...listCompanies().map(c => ({ id: c.id, label: c.shortName }))].map(c => (
-              <button key={c.id}
-                onClick={() => setCompanyFilter(c.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  companyFilter === c.id ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >{c.label}</button>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center" style={{ borderBottom: '1px solid var(--rule)' }}>
+            {companies.map(c => (
+              <button key={c.id} onClick={() => setCompanyFilter(c.id)}
+                className={`seg ${companyFilter === c.id ? 'seg-on' : ''}`}>{c.label}</button>
             ))}
           </div>
-          <a href="/quotes/new" className="btn-primary gap-2">
-            <Plus size={16} /> New Quote
-          </a>
+          <a href="/quotes/new" className="btn-primary"><Plus size={15} /> New quote</a>
         </div>
-      </div>
+      </header>
 
-      {/* Stats Grid */}
+      {/* Title-block metrics strip */}
       {showStats && (
-        <div className="space-y-4">
-          {/* Primary stats */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            {[
-              {
-                label: isAdmin ? 'Total Quotes' : 'My Quotes',
-                value: quotes.length,
-                sub: `avg ${fmtINR(avgQuoteValue)}`,
-                icon: <Hash size={16} />,
-                color: 'text-gray-600',
-                bg: 'bg-gray-100',
-              },
-              {
-                label: 'Pipeline',
-                value: fmtINR(totals.value),
-                sub: `${totals.sqft.toFixed(0)} sqft total`,
-                icon: <TrendingUp size={16} />,
-                color: 'text-blue-600',
-                bg: 'bg-blue-50',
-              },
-              {
-                label: 'Won Value',
-                value: fmtINR(approvedValue),
-                sub: `${conversionRate}% conversion`,
-                icon: <CheckCircle2 size={16} />,
-                color: 'text-emerald-600',
-                bg: 'bg-emerald-50',
-              },
-              {
-                label: 'This Month',
-                value: fmtINR(thisMonthValue),
-                sub: `${thisMonthQuotes.length} quotes`,
-                icon: <Calendar size={16} />,
-                color: 'text-violet-600',
-                bg: 'bg-violet-50',
-              },
-            ].map(s => (
-              <div key={s.label} className="stat-card group">
-                <div className="flex items-start justify-between mb-3.5">
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${s.bg}`}>
-                    <span className={s.color}>{s.icon}</span>
-                  </div>
-                  <ArrowUpRight size={14} className="text-gray-300 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-gray-400" />
-                </div>
-                <p className="stat-value text-[22px] font-black text-gray-900 tracking-tightest leading-none mb-1.5">{s.value}</p>
-                <p className="text-[11px] text-gray-500 font-semibold">{s.label}</p>
-                <p className="text-[11px] text-gray-400 mt-0.5 nums">{s.sub}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* Secondary insights */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-
-            {/* Status breakdown — clickable */}
-            <div className="card p-5">
-              <p className="text-[11px] font-bold text-gray-400 tracking-widest uppercase mb-4">Status</p>
-              <div className="grid grid-cols-2 gap-2">
-                {(['draft','sent','approved','rejected'] as QuoteStatus[]).map(s => {
-                  const n = quotes.filter(q => getStatus(q) === s).length
-                  const active = statusFilter === s
-                  return (
-                    <button key={s} onClick={() => setStatusFilter(prev => prev === s ? 'all' : s)}
-                      className={`text-left p-3 rounded-xl border-2 transition-all ${active ? 'border-gray-900 bg-gray-50' : 'border-transparent bg-gray-50/60 hover:bg-gray-50 hover:border-gray-200'}`}>
-                      <p className="text-lg font-black text-gray-900 leading-none">{n}</p>
-                      <p className="text-[10px] font-semibold text-gray-400 mt-1.5 uppercase tracking-wide">{STATUS_LABELS[s]}</p>
-                    </button>
-                  )
-                })}
-              </div>
+        <section className="grid grid-cols-2 md:grid-cols-4"
+          style={{ borderTop: '1px solid var(--rule-2)', borderBottom: '1px solid var(--rule-2)' }}>
+          {metrics.map((m, i) => (
+            <div key={m.label} className="py-5 pr-6"
+              style={{ borderLeft: i === 0 ? 'none' : '1px solid var(--rule)', paddingLeft: i === 0 ? 0 : '1.5rem' }}>
+              <div className="label mb-2" style={{ marginBottom: 8 }}>{m.label}</div>
+              <div className="fig text-[24px] sm:text-[26px] font-medium leading-none" style={{ color: 'var(--ink)' }}>{m.value}</div>
+              {m.meta && <div className="fig text-[11px] mt-2" style={{ color: 'var(--faint)' }}>{m.meta}</div>}
             </div>
-
-            {/* Tier breakdown */}
-            <div className="card p-5">
-              <p className="text-[11px] font-bold text-gray-400 tracking-widest uppercase mb-4">By Tier</p>
-              <div className="space-y-3">
-                {Object.entries(byTier).map(([tier, count]) => (
-                  <div key={tier}>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className={`${TIER_CLASS[tier] ?? 'badge-draft'} text-[10px]`}>{TIER_LABEL[tier] ?? tier}</span>
-                      <span className="text-xs font-bold text-gray-700">{count}</span>
-                    </div>
-                    <div className="h-1 bg-gray-100 rounded-full overflow-hidden">
-                      <div className="h-full bg-gray-800 rounded-full transition-all"
-                        style={{ width: `${(count / quotes.length) * 100}%` }} />
-                    </div>
-                  </div>
-                ))}
-                {Object.keys(byTier).length === 0 && <p className="text-sm text-gray-300">—</p>}
-              </div>
-            </div>
-
-            {/* Locations */}
-            <div className="card p-5">
-              <p className="text-[11px] font-bold text-gray-400 tracking-widest uppercase mb-4 flex items-center gap-1.5">
-                <MapPin size={11} /> Locations
-              </p>
-              <div className="space-y-2.5">
-                {Object.entries(locCount).sort((a,b) => b[1]-a[1]).slice(0,5).map(([loc, n], i) => (
-                  <div key={loc} className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="text-[10px] text-gray-300 font-semibold w-3">{i+1}</span>
-                      <span className="text-sm text-gray-700 truncate font-medium">{loc}</span>
-                    </div>
-                    <span className="text-xs font-bold text-gray-400 shrink-0 ml-2">{n}</span>
-                  </div>
-                ))}
-                {Object.keys(locCount).length === 0 && <p className="text-sm text-gray-300">No locations yet</p>}
-              </div>
-            </div>
-          </div>
-        </div>
+          ))}
+        </section>
       )}
 
-      {/* Search + filter */}
-      <div className="flex flex-col sm:flex-row gap-3 items-start">
-        <div className="relative flex-1 max-w-md">
-          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input className="input pl-10 text-sm" placeholder="Search client, project, quote #, location…"
-            value={search} onChange={e => setSearch(e.target.value)} />
+      {/* Controls */}
+      <div className="flex items-center justify-between gap-4 mt-9 mb-1">
+        <div className="relative flex-1 max-w-sm">
+          <Search size={15} className="absolute left-0 top-1/2 -translate-y-1/2" style={{ color: 'var(--faint)' }} />
+          <input
+            className="w-full bg-transparent border-0 pl-6 pr-3 py-2.5 text-[14px] focus:outline-none"
+            style={{ color: 'var(--ink)' }}
+            placeholder="Search records…"
+            value={search} onChange={e => setSearch(e.target.value)}
+          />
         </div>
-        {statusFilter !== 'all' && (
-          <button onClick={() => setStatusFilter('all')}
-            className="btn-secondary text-xs gap-2 self-start">
-            <Filter size={12} /> {STATUS_LABELS[statusFilter]}
-            <XCircle size={12} />
-          </button>
+        {showStats && (
+          <div className="hidden sm:flex items-center" style={{ borderBottom: '1px solid var(--rule)' }}>
+            <button onClick={() => setStatusFilter('all')} className={`seg ${statusFilter === 'all' ? 'seg-on' : ''}`}>All</button>
+            {statusCounts.map(({ s, n }) => (
+              <button key={s} onClick={() => setStatusFilter(prev => prev === s ? 'all' : s)}
+                className={`seg flex items-center gap-1.5 ${statusFilter === s ? 'seg-on' : ''}`}>
+                <span className="w-1.5 h-1.5 rounded-[1px]" style={{ background: STATUS_DOT[s] }} />
+                {STATUS_LABELS[s]}<span className="fig text-[11px]" style={{ color: 'var(--faint)' }}>{n}</span>
+              </button>
+            ))}
+          </div>
         )}
       </div>
 
-      {/* Quote list */}
+      {/* Ledger column header */}
+      {!loading && filtered.length > 0 && (
+        <div className="hidden md:flex items-center gap-4 px-3 py-2" style={{ borderBottom: '1px solid var(--rule-2)' }}>
+          <div className="flex-1 label mb-0">Client / Project</div>
+          <div className="w-28 label mb-0">Ref · Tier</div>
+          <div className="w-24 label mb-0">Status</div>
+          <div className="w-28 label mb-0 text-right">Amount</div>
+          <div className="w-[104px]" />
+        </div>
+      )}
+
+      {/* Ledger body */}
       {loading ? (
-        <div className="space-y-2.5">
-          {[1,2,3].map(i => (
-            <div key={i} className="card p-5 animate-pulse">
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 bg-gray-100 rounded-xl" />
-                <div className="flex-1 space-y-2">
-                  <div className="h-3.5 bg-gray-100 rounded-lg w-1/3" />
-                  <div className="h-3 bg-gray-50 rounded-lg w-1/2" />
-                </div>
-                <div className="h-3 bg-gray-100 rounded w-20" />
-              </div>
+        <div>
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="flex items-center gap-4 py-4 px-3" style={{ borderBottom: '1px solid var(--rule)' }}>
+              <div className="flex-1 space-y-2.5"><div className="skeleton h-3.5 w-52" /><div className="skeleton h-2.5 w-32" /></div>
+              <div className="skeleton h-3.5 w-20" />
             </div>
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="card p-16 text-center">
-          <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <FileText size={28} className="text-gray-300" />
+        <div className="py-24 text-center">
+          <div className="fig text-[11px] uppercase mb-3" style={{ color: 'var(--faint)', letterSpacing: '0.14em' }}>
+            {search ? 'No matches' : statusFilter !== 'all' ? 'Empty view' : 'Blank sheet'}
           </div>
-          <p className="text-gray-700 font-bold text-base">
-            {search ? 'No results found' : statusFilter !== 'all' ? `No ${STATUS_LABELS[statusFilter].toLowerCase()} quotes` : 'No quotes yet'}
+          <p className="font-display text-[19px] font-semibold" style={{ color: 'var(--ink)' }}>
+            {search ? 'Nothing matches that' : statusFilter !== 'all' ? `No ${STATUS_LABELS[statusFilter].toLowerCase()} quotes` : 'No quotations yet'}
           </p>
-          <p className="text-gray-400 text-sm mt-1">
-            {!search && statusFilter === 'all' ? 'Create your first quote to get started' : search ? 'Try a different search term' : ''}
+          <p className="text-[13.5px] mt-2" style={{ color: 'var(--muted)' }}>
+            {!search && statusFilter === 'all' ? 'Draw up your first quotation to begin the register.' : search ? 'Try a different term.' : 'They’ll be listed here.'}
           </p>
           {!search && statusFilter === 'all' && (
-            <a href="/quotes/new" className="btn-primary mt-6 inline-flex">
-              <Plus size={15} /> Create first quote
-            </a>
+            <a href="/quotes/new" className="btn-primary mt-6 inline-flex"><Plus size={15} /> New quote</a>
           )}
         </div>
       ) : (
-        <div className="space-y-2">
+        <div>
           {filtered.map(quote => (
-            <QuoteCard
-              key={quote.id}
-              quote={quote}
-              deleting={deleting === quote.id}
-              duplicating={duplicating === quote.id}
+            <QuoteRow key={quote.id} quote={quote}
+              deleting={deleting === quote.id} duplicating={duplicating === quote.id}
               onDelete={() => deleteQuote(quote.id, quote.clientName)}
               onDuplicate={() => duplicateQuote(quote)}
-              onStatusChange={s => updateStatus(quote.id, s)}
-            />
+              onStatusChange={s => updateStatus(quote.id, s)} />
           ))}
         </div>
       )}
@@ -358,7 +241,7 @@ export default function HomePage() {
   )
 }
 
-function QuoteCard({ quote, deleting, duplicating, onDelete, onDuplicate, onStatusChange }: {
+function QuoteRow({ quote, deleting, duplicating, onDelete, onDuplicate, onStatusChange }: {
   quote: Quote
   deleting: boolean
   duplicating: boolean
@@ -366,97 +249,78 @@ function QuoteCard({ quote, deleting, duplicating, onDelete, onDuplicate, onStat
   onDuplicate: () => void
   onStatusChange: (s: QuoteStatus) => void
 }) {
-  const [showStatusMenu, setShowStatusMenu] = useState(false)
+  const [menu, setMenu] = useState(false)
   const status = getStatus(quote)
-  const date = new Date(quote.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+  const date = new Date(quote.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
   const itemCount = quote.items?.length ?? 0
   let grandTotal = 0
   try { grandTotal = calculateQuote(quote).grandTotal } catch {}
 
-  const isExpiring = quote.validUntil && new Date(quote.validUntil) < new Date(Date.now() + 5 * 86400000)
-    && new Date(quote.validUntil) > new Date()
-
   return (
-    <div className="card-hover p-4 flex flex-col sm:flex-row sm:items-center gap-4 group">
+    <div className="group flex items-center gap-4 py-4 px-3 transition-colors duration-150 hover:bg-[color:var(--sheet)]"
+      style={{ borderBottom: '1px solid var(--rule)' }}>
+      {/* Client / project */}
+      <a href={`/quotes/${quote.id}/team`} className="flex-1 min-w-0 block">
+        <div className="flex items-baseline gap-2.5">
+          <span className="text-[14.5px] font-medium truncate" style={{ color: 'var(--ink)' }}>{quote.clientName}</span>
+          <span className="fig text-[11px] shrink-0" style={{ color: 'var(--faint)' }}>{date}</span>
+        </div>
+        <div className="flex items-center gap-2 mt-1 text-[12.5px]" style={{ color: 'var(--muted)' }}>
+          {quote.projectName && <span className="truncate">{quote.projectName}</span>}
+          {quote.projectName && quote.location && <span style={{ color: 'var(--rule-2)' }}>·</span>}
+          {quote.location && <span className="truncate">{quote.location}</span>}
+          <span style={{ color: 'var(--rule-2)' }}>·</span>
+          <span className="fig shrink-0 text-[11px]">{itemCount} item{itemCount !== 1 ? 's' : ''}</span>
+        </div>
+      </a>
 
-      {/* Status icon */}
-      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${STATUS_ICON_COLORS[status]}`}>
-        <FileText size={17} />
+      {/* Ref / tier */}
+      <div className="hidden md:block w-28 shrink-0">
+        <div className="fig text-[11.5px]" style={{ color: 'var(--ink-3)' }}>{quote.quoteNumber}</div>
+        <div className="fig text-[10px] uppercase mt-1" style={{ color: 'var(--faint)', letterSpacing: '0.06em' }}>
+          {quote.company ?? 'STC'} · {TIER_LABEL[quote.priceTier] ?? quote.priceTier}
+        </div>
       </div>
 
-      {/* Main info */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap mb-1">
-          <span className="font-bold text-gray-900 text-sm">{quote.clientName}</span>
-          <span className="text-[10px] font-semibold text-gray-300 font-mono">{quote.quoteNumber}</span>
-          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-100">
-            {quote.company ?? 'STC'}
-          </span>
-          <span className={`${TIER_CLASS[quote.priceTier] ?? 'badge-draft'}`}>
-            {TIER_LABEL[quote.priceTier]}
-          </span>
-
-          {/* Status dropdown */}
-          <div className="relative">
-            <button onClick={() => setShowStatusMenu(v => !v)}
-              className={`${STATUS_CLASS[status]} flex items-center gap-1 cursor-pointer hover:opacity-80 transition-opacity`}>
-              {STATUS_ICONS[status]}
-              {STATUS_LABELS[status]}
-              <ChevronDown size={9} />
-            </button>
-            {showStatusMenu && (
-              <div className="absolute top-full left-0 mt-1.5 w-36 bg-white border border-gray-200 rounded-xl shadow-xl z-10 py-1.5 overflow-hidden">
-                {(['draft','sent','approved','rejected'] as QuoteStatus[]).map(s => (
-                  <button key={s} onClick={() => { onStatusChange(s); setShowStatusMenu(false) }}
-                    className="w-full text-left px-3 py-2 text-xs hover:bg-gray-50 flex items-center gap-2 font-medium text-gray-700">
-                    {STATUS_ICONS[s]} {STATUS_LABELS[s]}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {grandTotal > 0 && (
-            <span className="font-black text-gray-900 text-sm">{fmtINR(grandTotal)}</span>
-          )}
-        </div>
-
-        {quote.projectName && (
-          <p className="text-sm text-gray-500 truncate">{quote.projectName}</p>
+      {/* Status callout */}
+      <div className="relative shrink-0 w-24 hidden sm:block">
+        <button onClick={() => setMenu(v => !v)}
+          className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase px-1.5 py-1 rounded-[2px] transition-colors hover:bg-[color:var(--sheet-2)]"
+          style={{ color: 'var(--ink-2)', letterSpacing: '0.05em' }}>
+          <span className="w-1.5 h-1.5 rounded-[1px]" style={{ background: STATUS_DOT[status] }} />
+          {STATUS_LABELS[status]}
+          <ChevronDown size={11} style={{ color: 'var(--faint)' }} />
+        </button>
+        {menu && (
+          <>
+            <div className="fixed inset-0 z-10" onClick={() => setMenu(false)} />
+            <div className="absolute top-full left-0 mt-1 w-40 rounded-[3px] z-20 py-1 animate-scale-in origin-top-left"
+              style={{ background: 'var(--sheet)', border: '1px solid var(--rule-2)', boxShadow: 'var(--shadow-pop, 0 10px 34px -12px rgb(28 25 21 / 0.28))' }}>
+              {(['draft', 'sent', 'approved', 'rejected'] as QuoteStatus[]).map(s => (
+                <button key={s} onClick={() => { onStatusChange(s); setMenu(false) }}
+                  className="w-full text-left px-3 py-1.5 font-mono text-[11px] uppercase flex items-center gap-2 hover:bg-[color:var(--sheet-2)] transition-colors"
+                  style={{ color: 'var(--ink-2)', letterSpacing: '0.05em' }}>
+                  <span className="w-1.5 h-1.5 rounded-[1px]" style={{ background: STATUS_DOT[s] }} />
+                  <span className="flex-1">{STATUS_LABELS[s]}</span>
+                  {s === status && <Check size={12} style={{ color: 'var(--accent)' }} />}
+                </button>
+              ))}
+            </div>
+          </>
         )}
+      </div>
 
-        <div className="flex items-center gap-3.5 mt-1.5 text-[11px] text-gray-400 flex-wrap font-medium">
-          <span className="flex items-center gap-1"><Calendar size={10} />{date}</span>
-          {quote.location && <span className="flex items-center gap-1"><MapPin size={10} />{quote.location}</span>}
-          <span>{itemCount} item{itemCount !== 1 ? 's' : ''}</span>
-          {isExpiring && (
-            <span className="flex items-center gap-1 text-amber-500 font-semibold">
-              <AlertCircle size={10} /> Expiring soon
-            </span>
-          )}
-          {quote.includeGst && <span className="text-gray-300">GST incl.</span>}
-        </div>
+      {/* Amount */}
+      <div className="fig text-[14px] font-medium text-right w-28 shrink-0" style={{ color: 'var(--ink)' }}>
+        {grandTotal > 0 ? fmtINR(grandTotal) : '—'}
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-1 shrink-0 opacity-80 group-hover:opacity-100 transition-opacity">
-        <a href={`/quotes/${quote.id}/client`} className="btn-primary text-xs px-3 py-2 gap-1.5">
-          <Eye size={12} /> View PDF
-        </a>
-        <a href={`/quotes/${quote.id}/team`} className="btn-secondary text-xs px-3 py-2 gap-1.5">
-          <Users size={12} /> Team
-        </a>
-        <a href={`/quotes/${quote.id}/edit`} className="btn-ghost text-xs px-2.5 py-2" title="Edit">
-          <Edit3 size={13} />
-        </a>
-        <button onClick={onDuplicate} disabled={duplicating}
-          className="btn-ghost text-xs px-2.5 py-2" title="Duplicate">
-          <Copy size={13} />
-        </button>
-        <button onClick={onDelete} disabled={deleting}
-          className="btn-ghost text-xs px-2.5 py-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50" title="Delete">
-          <Trash2 size={13} />
-        </button>
+      <div className="flex items-center gap-0.5 shrink-0 w-[104px] justify-end sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-150">
+        <a href={`/quotes/${quote.id}/client`} className="btn-ghost btn-sm">PDF</a>
+        <a href={`/quotes/${quote.id}/edit`} className="btn-ghost btn-sm">Edit</a>
+        <button onClick={onDuplicate} disabled={duplicating} className="btn-ghost btn-sm px-1.5" title="Duplicate"><Copy size={14} /></button>
+        <button onClick={onDelete} disabled={deleting} className="btn-ghost btn-sm px-1.5" title="Delete" style={{ color: 'var(--accent)' }}><Trash2 size={14} /></button>
       </div>
     </div>
   )
