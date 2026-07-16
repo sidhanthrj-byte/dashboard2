@@ -17,12 +17,14 @@ const STATUSES = ['active', 'inactive']
 interface FormState {
   name: string; email: string; phone: string; city: string
   status: string; notes: string; bases: string
+  password: string
   isAdmin: boolean
   permissions: UserPermissions
 }
 
 const emptyForm = (): FormState => ({
   name: '', email: '', phone: '', city: '', status: 'active', notes: '', bases: '[]',
+  password: '',
   isAdmin: false, permissions: emptyPermissions(),
 })
 
@@ -68,6 +70,8 @@ function AllUsersInner() {
       role: form.isAdmin ? 'admin' : 'viewer',
       is_admin: form.isAdmin,
       permissions: form.isAdmin ? undefined : form.permissions,
+      // Blank on edit = keep existing password; set = create/reset it.
+      password: form.password || undefined,
     }
     const res = editId
       ? await fetch(`/api/users/${editId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
@@ -89,6 +93,7 @@ function AllUsersInner() {
     setForm({
       name: u.name, email: u.email ?? '', phone: u.phone ?? '', city: u.city ?? '',
       status: u.status ?? 'active', notes: u.notes ?? '', bases: u.bases ?? '[]',
+      password: '',
       isAdmin,
       permissions: parsePermissions(u.permissions_json),
     })
@@ -212,6 +217,16 @@ function AllUsersInner() {
                   <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400">
                     {STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
                   </select>
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    {editId ? 'Reset password' : 'Password'}
+                    <span className="text-gray-400 font-normal"> {editId ? '(leave blank to keep current)' : '(optional — user sets one on first login if blank)'}</span>
+                  </label>
+                  <input type="password" value={form.password} autoComplete="new-password"
+                    onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+                    placeholder={editId ? 'New password' : 'At least 8 characters'}
+                    className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400" />
                 </div>
               </div>
 

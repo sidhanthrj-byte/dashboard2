@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbClient, dbCreateUser, dbLogActivity } from '@/lib/db'
 import { requireAdmin } from '@/lib/session'
+import { MIN_PASSWORD_LENGTH } from '@/lib/password'
 
 // Listing the user directory is an admin-only capability.
 export async function GET(req: NextRequest) {
@@ -33,6 +34,9 @@ export async function POST(req: NextRequest) {
   if ('error' in auth) return auth.error
 
   const body = await req.json()
+  if (typeof body.password === 'string' && body.password && body.password.length < MIN_PASSWORD_LENGTH) {
+    return NextResponse.json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` }, { status: 400 })
+  }
   const created = await dbCreateUser(body)
   await dbLogActivity(auth.user.userId, 'user.create', `Created user ${body.email ?? body.name}`)
   return NextResponse.json(created, { status: 201 })
