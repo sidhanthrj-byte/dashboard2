@@ -1,8 +1,11 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { initPaymentsTable, dbSeedProjectChecklist, getDbClient } from '@/lib/db'
+import { requirePermission } from '@/lib/session'
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
+  const _auth = await requirePermission('projects', 'view')
+  if ('error' in _auth) return _auth.error
   await initPaymentsTable()
   await dbSeedProjectChecklist(params.id)
   const db = getDbClient()
@@ -11,6 +14,8 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 }
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+  const _auth = await requirePermission('projects', 'edit')
+  if ('error' in _auth) return _auth.error
   await initPaymentsTable()
   const db = getDbClient()
   const { item_id, done, done_by } = await req.json()

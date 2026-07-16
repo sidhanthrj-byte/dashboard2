@@ -1,8 +1,11 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { initPaymentsTable, getDbClient } from '@/lib/db'
+import { requirePermission } from '@/lib/session'
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
+  const _auth = await requirePermission('projects', 'view')
+  if ('error' in _auth) return _auth.error
   await initPaymentsTable()
   const db = getDbClient()
   const payments = await db.execute('SELECT * FROM project_payments WHERE project_id = ? ORDER BY payment_date DESC', [params.id])
@@ -15,6 +18,8 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 }
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  const _auth = await requirePermission('projects', 'edit')
+  if ('error' in _auth) return _auth.error
   await initPaymentsTable()
   const db = getDbClient()
   const b = await req.json()

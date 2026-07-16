@@ -1,7 +1,8 @@
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { dbGetUser, dbListPermissions } from '@/lib/db'
 import { fmtDate } from '@/lib/format'
+import { getSessionUser } from '@/lib/session'
 
 type Row = Record<string, unknown>
 
@@ -13,6 +14,8 @@ const ROLE_COLORS: Record<string, string> = {
 const FEATURE_LABELS: Record<string, string> = { quotes: 'Quotations', inventory: 'Inventory', projects: 'Projects', analytics: 'Analytics', users: 'User Management' }
 
 export default async function UserDetailPage({ params }: { params: { id: string } }) {
+  const me = await getSessionUser()
+  if (!me?.isAdmin) redirect('/quotes')
   const user = (await dbGetUser(params.id)) as Row | null
   if (!user) notFound()
   const role = String(user.access_level ?? 'viewer')

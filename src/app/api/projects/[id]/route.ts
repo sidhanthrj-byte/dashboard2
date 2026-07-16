@@ -1,7 +1,11 @@
+export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { initProjectsTables, getDbClient } from '@/lib/db'
+import { requirePermission } from '@/lib/session'
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
+  const auth = await requirePermission('projects', 'view')
+  if ('error' in auth) return auth.error
   await initProjectsTables()
   const db = getDbClient()
   const p = await db.execute('SELECT * FROM projects WHERE id = ?', [params.id])
@@ -12,6 +16,8 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 }
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+  const auth = await requirePermission('projects', 'edit')
+  if ('error' in auth) return auth.error
   await initProjectsTables()
   const db = getDbClient()
   const b = await req.json()
@@ -25,6 +31,8 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 }
 
 export async function DELETE(_: NextRequest, { params }: { params: { id: string } }) {
+  const auth = await requirePermission('projects', 'delete')
+  if ('error' in auth) return auth.error
   await initProjectsTables()
   const db = getDbClient()
   await db.execute('DELETE FROM project_materials WHERE project_id = ?', [params.id])

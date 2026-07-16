@@ -2,8 +2,11 @@ export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
 import { initInventoryTables, getDbClient } from '@/lib/db'
+import { requirePermission } from '@/lib/session'
 
 export async function GET() {
+  const _auth = await requirePermission('inventory', 'view')
+  if ('error' in _auth) return _auth.error
   await initInventoryTables()
   const db = getDbClient()
 

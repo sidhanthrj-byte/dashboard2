@@ -1,18 +1,15 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
-import { dbApproveAccessRequest, dbDenyAccessRequest, dbGetSession } from '@/lib/db'
+import { dbApproveAccessRequest, dbDenyAccessRequest } from '@/lib/db'
+import { requireAdmin } from '@/lib/session'
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
-  const sessionId = req.cookies.get('pongs_session')?.value
-  if (!sessionId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const session = await dbGetSession(sessionId)
-  const role = String(session?.role ?? session?.access_level ?? '')
-  if (!session || !['admin', 'manager'].includes(role)) {
-    return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
-  }
+  // Approving a request provisions a user account — admin-only.
+  const auth = await requireAdmin()
+  if ('error' in auth) return auth.error
 
   const b = await req.json()
-  const approverEmail = String(session.email)
+  const approverEmail = auth.user.email
 
   if (b.action === 'approve') {
     await dbApproveAccessRequest(params.id, approverEmail, b.role ?? 'viewer')

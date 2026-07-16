@@ -1,7 +1,11 @@
+export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { initProjectsTables, getDbClient } from '@/lib/db'
+import { requirePermission } from '@/lib/session'
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+  const _auth = await requirePermission('projects', 'edit')
+  if ('error' in _auth) return _auth.error
   await initProjectsTables()
   const db = getDbClient()
   const b = await req.json()

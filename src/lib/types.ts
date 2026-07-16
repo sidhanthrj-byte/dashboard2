@@ -79,6 +79,12 @@ export interface Quote {
   company?: string
   // Ownership: email of the user who created the quote (RBAC)
   ownerEmail?: string
+  // Revision trail: an original quote has revision 0, parentId undefined and
+  // rootId === id. A revision points at its parent and shares the family rootId.
+  parentId?: string
+  rootId?: string
+  revision?: number
+  revisedBy?: string
 }
 
 export interface LineItem {

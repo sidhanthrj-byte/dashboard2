@@ -1,7 +1,9 @@
 export const dynamic = 'force-dynamic'
 
+import { redirect } from 'next/navigation'
 import { dbListActivity } from '@/lib/db'
 import { fmtDate } from '@/lib/format'
+import { getSessionUser } from '@/lib/session'
 
 type Row = Record<string, unknown>
 
@@ -20,6 +22,8 @@ function relative(iso: string): string {
 }
 
 export default async function ActivityPage() {
+  const me = await getSessionUser()
+  if (!me?.isAdmin) redirect('/quotes')
   const rows = (await dbListActivity(150)) as unknown as Row[]
 
   return (
