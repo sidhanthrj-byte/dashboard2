@@ -1,4 +1,5 @@
 'use client'
+import Gate from '@/components/Gate'
 import { useEffect, useState, useCallback } from 'react'
 
 type Request = {
@@ -13,7 +14,7 @@ const STATUS_COLORS: Record<string, string> = { pending:'bg-amber-100 text-amber
 
 function fmtDate(s: string) { if (!s) return '—'; return new Date(s).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) }
 
-export default function AccessRequestsPage() {
+function AccessRequestsPage() {
   const [requests, setRequests] = useState<Request[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('pending')
@@ -141,4 +142,8 @@ export default function AccessRequestsPage() {
       )}
     </div>
   )
+}
+
+export default function AccessRequestsPagePage_Guarded() {
+  return <Gate admin><AccessRequestsPage /></Gate>
 }

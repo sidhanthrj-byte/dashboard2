@@ -1,4 +1,5 @@
 'use client'
+import Gate from '@/components/Gate'
 import { useEffect, useState, useCallback } from 'react'
 
 const ROLES = ['admin','manager','sales','installer','viewer']
@@ -9,7 +10,7 @@ const ROLE_COLORS: Record<string, string> = { admin:'bg-red-100 text-red-700', m
 
 type PermRow = { role: string; feature: string; can_view: number; can_edit: number }
 
-export default function PermissionsPage() {
+function PermissionsPage() {
   const [perms, setPerms] = useState<PermRow[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -123,4 +124,8 @@ export default function PermissionsPage() {
       </div>
     </div>
   )
+}
+
+export default function PermissionsPagePage_Guarded() {
+  return <Gate admin><PermissionsPage /></Gate>
 }

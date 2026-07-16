@@ -1,8 +1,12 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { initAuthTables, dbListAccessRequests, getDbClient } from '@/lib/db'
+import { requireAdmin } from '@/lib/session'
 
 export async function GET(req: NextRequest) {
+  // Viewing pending access requests is an admin-only board.
+  const auth = await requireAdmin()
+  if ('error' in auth) return auth.error
   const status = req.nextUrl.searchParams.get('status') ?? undefined
   const rows = await dbListAccessRequests(status)
   return NextResponse.json(rows)

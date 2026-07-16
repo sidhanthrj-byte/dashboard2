@@ -1,4 +1,5 @@
 'use client'
+import Gate from '@/components/Gate'
 import { useEffect, useState } from 'react'
 
 interface User {
@@ -6,7 +7,7 @@ interface User {
   access_level: string; status: string; created_at: string; last_login: string
 }
 
-export default function UsersDashboard() {
+function UsersDashboard() {
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -129,4 +130,8 @@ export default function UsersDashboard() {
       </div>
     </div>
   )
+}
+
+export default function UsersDashboardPage_Guarded() {
+  return <Gate admin><UsersDashboard /></Gate>
 }

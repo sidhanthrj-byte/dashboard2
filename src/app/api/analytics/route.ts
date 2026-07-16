@@ -2,8 +2,11 @@ export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
 import { initQuotesTable, initInventoryTables, initProjectsTables, getDbClient } from '@/lib/db'
+import { requirePermission } from '@/lib/session'
 
 export async function GET() {
+  const _auth = await requirePermission('analytics', 'view')
+  if ('error' in _auth) return _auth.error
   await Promise.all([initQuotesTable(), initInventoryTables(), initProjectsTables()])
   const db = getDbClient()
 

@@ -1,8 +1,13 @@
+export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
-import { initInventoryTables, getDbClient } from '@/lib/db'
+import { getDbClient, dbCreateUser, dbLogActivity } from '@/lib/db'
+import { requireAdmin } from '@/lib/session'
 
+// Listing the user directory is an admin-only capability.
 export async function GET(req: NextRequest) {
-  await initInventoryTables()
+  const auth = await requireAdmin()
+  if ('error' in auth) return auth.error
+
   const db = getDbClient()
   const { searchParams } = req.nextUrl
   const city = searchParams.get('city')
@@ -20,17 +25,15 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(result.rows)
 }
 
+// Only an administrator may create users. Role + permissions are normalised
+// server-side (see dbCreateUser) so a non-admin can never mint an admin and a
+// client can never smuggle in a role/permission set it wasn't granted.
 export async function POST(req: NextRequest) {
-  await initInventoryTables()
-  const db = getDbClient()
+  const auth = await requireAdmin()
+  if ('error' in auth) return auth.error
+
   const body = await req.json()
-  const id = crypto.randomUUID()
-  const bases = Array.isArray(body.bases) ? JSON.stringify(body.bases) : (body.bases ?? '[]')
-  await db.execute(
-    `INSERT INTO app_users (id, name, email, city, access_level, bases, status, phone, notes)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [id, body.name ?? '', body.email ?? null, body.city ?? null, body.access_level ?? 'editor', bases, body.status ?? 'active', body.phone ?? null, body.notes ?? null],
-  )
-  const result = await db.execute('SELECT * FROM app_users WHERE id = ?', [id])
-  return NextResponse.json(result.rows[0], { status: 201 })
+  const created = await dbCreateUser(body)
+  await dbLogActivity(auth.user.userId, 'user.create', `Created user ${body.email ?? body.name}`)
+  return NextResponse.json(created, { status: 201 })
 }

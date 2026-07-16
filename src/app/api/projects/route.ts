@@ -1,7 +1,11 @@
+export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { initProjectsTables, getDbClient } from '@/lib/db'
+import { requirePermission } from '@/lib/session'
 
 export async function GET(req: NextRequest) {
+  const auth = await requirePermission('projects', 'view')
+  if ('error' in auth) return auth.error
   await initProjectsTables()
   const db = getDbClient()
   const status = req.nextUrl.searchParams.get('status')
@@ -18,6 +22,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requirePermission('projects', 'create')
+  if ('error' in auth) return auth.error
   await initProjectsTables()
   const db = getDbClient()
   const b = await req.json()

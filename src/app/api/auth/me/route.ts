@@ -1,16 +1,16 @@
 export const dynamic = 'force-dynamic'
-import { NextRequest, NextResponse } from 'next/server'
-import { dbGetSession } from '@/lib/db'
+import { NextResponse } from 'next/server'
+import { getSessionUser } from '@/lib/session'
 
-export async function GET(req: NextRequest) {
-  const sessionId = req.cookies.get('pongs_session')?.value
-  if (!sessionId) return NextResponse.json(null)
-  const session = await dbGetSession(sessionId)
-  if (!session) return NextResponse.json(null)
+export async function GET() {
+  const user = await getSessionUser()
+  if (!user) return NextResponse.json(null)
   return NextResponse.json({
-    id: session.user_id,
-    name: session.name,
-    email: session.email,
-    role: session.role ?? session.access_level,
+    id: user.userId,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    isAdmin: user.isAdmin,
+    permissions: user.permissions,
   })
 }

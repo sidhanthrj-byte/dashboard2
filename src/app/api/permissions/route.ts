@@ -2,8 +2,11 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { initPermissionsTables, getDbClient } from '@/lib/db'
+import { requireAdmin } from '@/lib/session'
 
 export async function GET() {
+  const auth = await requireAdmin()
+  if ('error' in auth) return auth.error
   await initPermissionsTables()
   const db = getDbClient()
   const r = await db.execute('SELECT * FROM role_permissions ORDER BY role, feature')
@@ -11,6 +14,8 @@ export async function GET() {
 }
 
 export async function PUT(req: NextRequest) {
+  const auth = await requireAdmin()
+  if ('error' in auth) return auth.error
   await initPermissionsTables()
   const db = getDbClient()
   const updates: { role: string; feature: string; can_view: number; can_edit: number }[] = await req.json()

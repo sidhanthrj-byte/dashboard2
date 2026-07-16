@@ -1,7 +1,11 @@
+export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { initInventoryTables, getDbClient } from '@/lib/db'
+import { requirePermission } from '@/lib/session'
 
 export async function GET() {
+  const _auth = await requirePermission('inventory', 'view')
+  if ('error' in _auth) return _auth.error
   await initInventoryTables()
   const db = getDbClient()
   const purchases = await db.execute('SELECT * FROM inv_purchases ORDER BY purchase_date DESC')
@@ -17,6 +21,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const _auth = await requirePermission('inventory', 'create')
+  if ('error' in _auth) return _auth.error
   await initInventoryTables()
   const db = getDbClient()
   const body = await req.json()

@@ -1,8 +1,11 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { initClientsTable, getDbClient } from '@/lib/db'
+import { requirePermission } from '@/lib/session'
 
 export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
+  const _auth = await requirePermission('clients', 'view')
+  if ('error' in _auth) return _auth.error
   await initClientsTable()
   const db = getDbClient()
   const c = await db.execute('SELECT * FROM clients WHERE id = ?', [params.id])
@@ -13,6 +16,8 @@ export async function GET(_: NextRequest, { params }: { params: { id: string } }
 }
 
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+  const _auth = await requirePermission('clients', 'edit')
+  if ('error' in _auth) return _auth.error
   await initClientsTable()
   const db = getDbClient()
   const b = await req.json()
@@ -26,6 +31,8 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 }
 
 export async function DELETE(_: NextRequest, { params }: { params: { id: string } }) {
+  const _auth = await requirePermission('clients', 'delete')
+  if ('error' in _auth) return _auth.error
   await initClientsTable()
   const db = getDbClient()
   await db.execute('DELETE FROM clients WHERE id = ?', [params.id])

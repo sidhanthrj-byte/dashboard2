@@ -1,13 +1,14 @@
 export const dynamic = 'force-dynamic'
 import { NextResponse } from 'next/server'
 import { dbListQuotesForUser, dbSaveQuote, dbNextQuoteNumber } from '@/lib/db'
-import { getSessionUser, ownerFilterFor } from '@/lib/session'
+import { requirePermission, ownerFilterFor } from '@/lib/session'
 import { v4 as uuid } from 'uuid'
 
 export async function GET(request: Request) {
   try {
-    const user = await getSessionUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const auth = await requirePermission('quotes', 'view')
+    if ('error' in auth) return auth.error
+    const user = auth.user
 
     const { searchParams } = new URL(request.url)
     const q = searchParams.get('q')?.toLowerCase() ?? ''
@@ -37,18 +38,25 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const user = await getSessionUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const auth = await requirePermission('quotes', 'create')
+    if ('error' in auth) return auth.error
+    const user = auth.user
 
     const body = await request.json()
     const now = new Date().toISOString()
+    const id = uuid()
     const quote = {
       ...body,
-      id: uuid(),
+      id,
       quoteNumber: await dbNextQuoteNumber(),
       // Ownership assigned from the session — never trusted from the client
       ownerEmail: user.email,
       company: body.company ?? 'STC',
+      // A freshly created quote is always an original (root of its own trail).
+      parentId: undefined,
+      rootId: id,
+      revision: 0,
+      revisedBy: undefined,
       createdAt: now,
       updatedAt: now,
     }

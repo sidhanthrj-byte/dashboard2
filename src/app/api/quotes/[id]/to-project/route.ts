@@ -1,8 +1,12 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { initProjectsTables, initPaymentsTable, dbSeedProjectChecklist, getDbClient, dbGetQuote } from '@/lib/db'
+import { requirePermission } from '@/lib/session'
 
 export async function POST(_: NextRequest, { params }: { params: { id: string } }) {
+  // Converting a quote into a project writes to the projects module.
+  const auth = await requirePermission('projects', 'create')
+  if ('error' in auth) return auth.error
   await initProjectsTables()
   await initPaymentsTable()
   const quote = await dbGetQuote(params.id)

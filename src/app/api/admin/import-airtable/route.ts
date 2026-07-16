@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { initInventoryTables, initClientsTable, getDbClient } from '@/lib/db'
+import { requireAdmin } from '@/lib/session'
 
 const AIRTABLE_TOKEN = process.env.AIRTABLE_TOKEN ?? ''
 const INV_BASE = 'app2FrlwV3q6xJj2O'
@@ -26,6 +27,8 @@ async function fetchAll(baseId: string, tableId: string) {
 }
 
 export async function POST(req: NextRequest) {
+  const _auth = await requireAdmin()
+  if ('error' in _auth) return _auth.error
   const { secret, test } = await req.json()
   if (secret !== 'pongs-import-2024') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!AIRTABLE_TOKEN) return NextResponse.json({ error: 'AIRTABLE_TOKEN env var not set — check Vercel environment variables' }, { status: 500 })

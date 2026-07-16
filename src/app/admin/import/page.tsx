@@ -1,7 +1,8 @@
 'use client'
+import Gate from '@/components/Gate'
 import { useState } from 'react'
 
-export default function ImportPage() {
+function ImportPage() {
   const [importing, setImporting] = useState(false)
   const [result, setResult] = useState<{ ok?: boolean; imported?: Record<string, number>; totals?: Record<string, number>; error?: string } | null>(null)
   const [testing, setTesting] = useState(false)
@@ -106,4 +107,8 @@ export default function ImportPage() {
       </p>
     </div>
   )
+}
+
+export default function ImportPagePage_Guarded() {
+  return <Gate admin><ImportPage /></Gate>
 }

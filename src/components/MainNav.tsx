@@ -7,16 +7,21 @@ import {
 } from 'lucide-react'
 import NotificationBell from '@/components/NotificationBell'
 import UserMenu from '@/components/UserMenu'
+import { useMe, can } from '@/lib/useMe'
+import type { ModuleName } from '@/lib/permissions'
 
-const LINKS = [
-  { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/quotes', label: 'Quotes', icon: FileText },
-  { href: '/projects', label: 'Projects', icon: Hammer },
-  { href: '/inventory', label: 'Inventory', icon: Boxes },
-  { href: '/clients', label: 'Clients', icon: Users2 },
-  { href: '/finance', label: 'Finance', icon: Wallet },
-  { href: '/analytics', label: 'Analytics', icon: BarChart3 },
-  { href: '/users', label: 'Users', icon: Shield },
+// Each link declares the capability that unlocks it. `admin` links are only
+// shown to full administrators; `module` links to users with view access.
+// The nav is advisory: every destination independently enforces access.
+const LINKS: { href: string; label: string; icon: typeof LayoutDashboard; module?: ModuleName; admin?: boolean }[] = [
+  { href: '/', label: 'Dashboard', icon: LayoutDashboard, module: 'dashboard' },
+  { href: '/quotes', label: 'Quotes', icon: FileText, module: 'quotes' },
+  { href: '/projects', label: 'Projects', icon: Hammer, module: 'projects' },
+  { href: '/inventory', label: 'Inventory', icon: Boxes, module: 'inventory' },
+  { href: '/clients', label: 'Clients', icon: Users2, module: 'clients' },
+  { href: '/finance', label: 'Finance', icon: Wallet, module: 'finance' },
+  { href: '/analytics', label: 'Analytics', icon: BarChart3, module: 'analytics' },
+  { href: '/users', label: 'Users', icon: Shield, admin: true },
 ]
 
 function isActive(pathname: string, href: string) {
@@ -27,12 +32,18 @@ function isActive(pathname: string, href: string) {
 export default function MainNav() {
   const pathname = usePathname() || '/'
   const [open, setOpen] = useState(false)
+  const { me } = useMe()
+
+  // Only show links the user is actually allowed to open.
+  const links = LINKS.filter(l =>
+    l.admin ? !!me?.isAdmin : l.module ? can(me, l.module, 'view') : true,
+  )
 
   return (
     <>
       {/* Desktop nav — title-block tabs */}
       <nav className="hidden lg:flex items-center gap-0.5">
-        {LINKS.map(({ href, label }) => {
+        {links.map(({ href, label }) => {
           const active = isActive(pathname, href)
           return (
             <a key={href} href={href}
@@ -65,7 +76,7 @@ export default function MainNav() {
         <div className="lg:hidden fixed inset-0 top-[56px] z-40 animate-fade-in" style={{ background: 'rgba(28,25,21,0.16)' }} onClick={() => setOpen(false)}>
           <div className="p-3 animate-slide-up" style={{ background: 'var(--sheet)', borderBottom: '1px solid var(--rule-2)' }} onClick={e => e.stopPropagation()}>
             <div className="grid grid-cols-2 gap-1">
-              {LINKS.map(({ href, label, icon: Icon }) => {
+              {links.map(({ href, label, icon: Icon }) => {
                 const active = isActive(pathname, href)
                 return (
                   <a key={href} href={href} onClick={() => setOpen(false)}

@@ -1,5 +1,6 @@
 import { createClient, type InValue } from '@libsql/client'
 import type { Quote } from './types'
+import { fullPermissions, parsePermissions, permissionsForLegacyRole } from './permissions'
 
 let _client: ReturnType<typeof createClient> | null = null
 
@@ -62,6 +63,16 @@ export async function initQuotesTable() {
   await db.execute(`UPDATE pongs_quotes SET owner_email = 'sidhanthrj@gmail.com' WHERE owner_email IS NULL OR owner_email = ''`)
   // Migrate: bump any quotes still using the old ₹60 default to ₹120
   await db.execute(`UPDATE pongs_quotes SET installation_rate = 120 WHERE installation_rate = 60`)
+  // Migrate: quote revision trail. A quote is either an original (root_id = its
+  // own id, parent_id NULL, revision 0) or a revision that points back to its
+  // immediate parent and shares the root_id of the original.
+  try { await db.execute(`ALTER TABLE pongs_quotes ADD COLUMN parent_id TEXT`) } catch { /* exists */ }
+  try { await db.execute(`ALTER TABLE pongs_quotes ADD COLUMN root_id TEXT`) } catch { /* exists */ }
+  try { await db.execute(`ALTER TABLE pongs_quotes ADD COLUMN revision INTEGER DEFAULT 0`) } catch { /* exists */ }
+  try { await db.execute(`ALTER TABLE pongs_quotes ADD COLUMN revised_by TEXT`) } catch { /* exists */ }
+  // Backfill: existing standalone quotes are their own root at revision 0.
+  await db.execute(`UPDATE pongs_quotes SET root_id = id WHERE root_id IS NULL OR root_id = ''`)
+  await db.execute(`UPDATE pongs_quotes SET revision = 0 WHERE revision IS NULL`)
 }
 
 // Ownership-aware listing. Pass ownerEmail=null for admins (all quotes),
@@ -122,13 +133,17 @@ export async function dbSaveQuote(quote: Record<string, unknown>) {
     quote.manualRates ? JSON.stringify(quote.manualRates) : null,
     (quote.ownerEmail as string) ?? null,
     String(quote.company ?? 'STC'),
+    (quote.parentId as string) ?? null,
+    String(quote.rootId ?? quote.id ?? ''),
+    Number(quote.revision ?? 0),
+    (quote.revisedBy as string) ?? null,
   ]
   await db.execute(
     `INSERT INTO pongs_quotes (id, quote_number, client_name, project_name, location, date, valid_until,
       price_tier, markup_percent, installation_rate, transport_cost, include_gst, display_mode,
       items_json, notes, grand_total, client_email, client_phone, status, created_at, updated_at, manual_rates_json,
-      owner_email, company)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      owner_email, company, parent_id, root_id, revision, revised_by)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       ON CONFLICT(id) DO UPDATE SET
         client_name=excluded.client_name, project_name=excluded.project_name,
         location=excluded.location, date=excluded.date, valid_until=excluded.valid_until,
@@ -142,6 +157,65 @@ export async function dbSaveQuote(quote: Record<string, unknown>) {
         company=excluded.company`,
     args,
   )
+}
+
+// ---------------------------------------------------------------------------
+// QUOTE REVISION TRAIL
+// ---------------------------------------------------------------------------
+
+// Return every quote in the revision family of `id` (the original + all
+// revisions), ordered oldest-first by revision number.
+export async function dbListRevisions(id: string): Promise<Quote[]> {
+  await initQuotesTable()
+  const db = getClient()
+  const base = await db.execute('SELECT root_id FROM pongs_quotes WHERE id = ?', [id])
+  if (!base.rows.length) return []
+  const rootId = String((base.rows[0] as Record<string, unknown>).root_id ?? id)
+  const r = await db.execute(
+    'SELECT * FROM pongs_quotes WHERE root_id = ? ORDER BY revision ASC, created_at ASC',
+    [rootId],
+  )
+  return r.rows.map(rowToQuote) as unknown as Quote[]
+}
+
+// Create a new revision from an existing quote. The original is never mutated;
+// a brand new row is inserted, linked to the source via parent_id and sharing
+// the family's root_id. Returns the newly created revision quote.
+export async function dbCreateRevision(
+  sourceId: string,
+  patch: Record<string, unknown>,
+  revisedByEmail: string,
+): Promise<Quote | null> {
+  await initQuotesTable()
+  const db = getClient()
+  const source = await dbGetQuote(sourceId)
+  if (!source) return null
+  const s = source as unknown as Record<string, unknown>
+  const rootId = String(s.rootId ?? s.id)
+  // Highest revision number currently in the family.
+  const maxR = await db.execute(
+    'SELECT MAX(revision) as m FROM pongs_quotes WHERE root_id = ?',
+    [rootId],
+  )
+  const nextRev = Number((maxR.rows[0] as Record<string, unknown>).m ?? 0) + 1
+  const now = new Date().toISOString()
+  const newId = crypto.randomUUID()
+  const revised = {
+    ...s,
+    ...patch,
+    id: newId,
+    // Same visible quote number, suffixed with the revision marker.
+    quoteNumber: `${String(s.quoteNumber ?? '').replace(/\s*-\s*R\d+$/i, '')} - R${nextRev}`,
+    ownerEmail: s.ownerEmail, // ownership follows the original
+    parentId: sourceId,
+    rootId,
+    revision: nextRev,
+    revisedBy: revisedByEmail,
+    createdAt: now,
+    updatedAt: now,
+  }
+  await dbSaveQuote(revised)
+  return (await dbGetQuote(newId)) as Quote
 }
 
 export async function dbDeleteQuote(id: string) {
@@ -582,6 +656,10 @@ function rowToQuote(row: any): Record<string, unknown> {
     manualRates: row.manual_rates_json ? JSON.parse(row.manual_rates_json as string) : undefined,
     ownerEmail: row.owner_email ?? undefined,
     company: row.company ?? 'STC',
+    parentId: row.parent_id ?? undefined,
+    rootId: row.root_id ?? row.id,
+    revision: Number(row.revision ?? 0),
+    revisedBy: row.revised_by ?? undefined,
   }
 }
 
@@ -652,11 +730,20 @@ export async function initPermissionsTables() {
 // AUTH + ACCESS REQUESTS
 // ===========================================================================
 
+let _authInit = false
 export async function initAuthTables() {
+  if (_authInit) return
+  // app_users is created by initInventoryTables — ensure it exists before we
+  // migrate/seed it (matters on a fresh database where auth runs first).
+  await initInventoryTables()
   const db = getClient()
   // Add role column to app_users if missing
   try { await db.execute(`ALTER TABLE app_users ADD COLUMN role TEXT DEFAULT 'viewer'`) } catch {}
   try { await db.execute(`ALTER TABLE app_users ADD COLUMN password_hash TEXT`) } catch {}
+  // Granular, user-specific permissions (JSON blob). NULL for legacy rows;
+  // backfilled below from the coarse role so nobody loses access on migration.
+  try { await db.execute(`ALTER TABLE app_users ADD COLUMN permissions_json TEXT`) } catch {}
+
   // Seed admin user
   const admin = await db.execute(`SELECT id FROM app_users WHERE email = 'sidhanthrj@gmail.com'`)
   if (!admin.rows.length) {
@@ -667,6 +754,18 @@ export async function initAuthTables() {
   } else {
     await db.execute(`UPDATE app_users SET role='admin', access_level='admin', status='active' WHERE email='sidhanthrj@gmail.com'`)
   }
+
+  // --- ROOT-CAUSE FIX for "newly created admins are not admins" ---------------
+  // Historically the user-create form wrote only `access_level`, leaving `role`
+  // at its 'viewer' default. Authorization keys off `role`, so those accounts
+  // silently became non-admins. Reconcile the two columns so role is the single
+  // source of truth and any account marked admin via access_level really is one.
+  await db.execute(`UPDATE app_users SET role='admin' WHERE access_level='admin' AND (role IS NULL OR role != 'admin')`)
+  await db.execute(`UPDATE app_users SET access_level='admin' WHERE role='admin' AND (access_level IS NULL OR access_level != 'admin')`)
+
+  // Backfill granular permissions for any existing user that predates the model.
+  // Derived from the legacy role so current access is preserved exactly.
+  await backfillUserPermissions()
 
   await db.execute(`CREATE TABLE IF NOT EXISTS access_requests (
     id TEXT PRIMARY KEY,
@@ -689,6 +788,87 @@ export async function initAuthTables() {
     created_at TEXT DEFAULT (datetime('now')),
     expires_at TEXT NOT NULL
   )`)
+
+  _authInit = true
+}
+
+// Seed permissions_json for any user that doesn't have it yet, derived from the
+// coarse legacy role. Idempotent: only touches rows where permissions_json IS NULL.
+async function backfillUserPermissions() {
+  const db = getClient()
+  const rows = (await db.execute(
+    `SELECT id, role, access_level FROM app_users WHERE permissions_json IS NULL`
+  )).rows as unknown as Record<string, unknown>[]
+  for (const u of rows) {
+    const role = String(u.role ?? u.access_level ?? 'viewer')
+    const perms = permissionsForLegacyRole(role)
+    await db.execute(`UPDATE app_users SET permissions_json = ? WHERE id = ?`, [
+      JSON.stringify(perms),
+      String(u.id),
+    ])
+  }
+}
+
+// ---------------------------------------------------------------------------
+// USER MANAGEMENT (admin-only writes — authorization enforced in the API layer)
+// ---------------------------------------------------------------------------
+
+// Normalises a create/update payload into the columns we persist. Crucially,
+// `role` and `access_level` are kept in lock-step and `permissions_json` is
+// always derived server-side — the client can never smuggle in a role.
+function normaliseUserWrite(body: Record<string, unknown>) {
+  const isAdmin = body.role === 'admin' || body.access_level === 'admin' || body.is_admin === true
+  const role = isAdmin ? 'admin' : (String(body.role ?? body.access_level ?? 'viewer') || 'viewer')
+  const accessLevel = role
+  // Admins get a full set implicitly; otherwise take the explicit granular map
+  // (or, if none supplied, fall back to the legacy-role defaults).
+  const perms = isAdmin
+    ? fullPermissions()
+    : (body.permissions
+        ? parsePermissions(body.permissions)
+        : permissionsForLegacyRole(role))
+  return { role, accessLevel, permissionsJson: JSON.stringify(perms) }
+}
+
+export async function dbCreateUser(body: Record<string, unknown>) {
+  await initInventoryTables()
+  await initAuthTables()
+  const db = getClient()
+  const id = (body.id as string) || crypto.randomUUID()
+  const bases = Array.isArray(body.bases) ? JSON.stringify(body.bases) : ((body.bases as string) ?? '[]')
+  const { role, accessLevel, permissionsJson } = normaliseUserWrite(body)
+  await db.execute(
+    `INSERT INTO app_users (id, name, email, city, access_level, role, permissions_json, bases, status, phone, notes)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+    [id, (body.name as string) ?? '', (body.email as string) ?? null, (body.city as string) ?? null,
+     accessLevel, role, permissionsJson, bases, (body.status as string) ?? 'active',
+     (body.phone as string) ?? null, (body.notes as string) ?? null],
+  )
+  const r = await db.execute('SELECT * FROM app_users WHERE id = ?', [id])
+  return r.rows[0]
+}
+
+export async function dbUpdateUser(id: string, body: Record<string, unknown>) {
+  await initInventoryTables()
+  await initAuthTables()
+  const db = getClient()
+  const bases = Array.isArray(body.bases) ? JSON.stringify(body.bases) : ((body.bases as string) ?? '[]')
+  const { role, accessLevel, permissionsJson } = normaliseUserWrite(body)
+  await db.execute(
+    `UPDATE app_users SET name=?, email=?, city=?, access_level=?, role=?, permissions_json=?,
+       bases=?, status=?, phone=?, notes=? WHERE id=?`,
+    [(body.name as string) ?? '', (body.email as string) ?? null, (body.city as string) ?? null,
+     accessLevel, role, permissionsJson, bases, (body.status as string) ?? 'active',
+     (body.phone as string) ?? null, (body.notes as string) ?? null, id],
+  )
+  const r = await db.execute('SELECT * FROM app_users WHERE id = ?', [id])
+  return r.rows[0]
+}
+
+export async function dbDeleteUser(id: string) {
+  await initInventoryTables()
+  const db = getClient()
+  await db.execute('DELETE FROM app_users WHERE id = ?', [id])
 }
 
 export async function dbListAccessRequests(status?: string) {
@@ -760,7 +940,7 @@ export async function dbGetSession(sessionId: string) {
   const db = getClient()
   const now = new Date().toISOString()
   const r = await db.execute(
-    `SELECT s.*, u.name, u.email, u.role, u.access_level FROM auth_sessions s
+    `SELECT s.*, u.name, u.email, u.role, u.access_level, u.status, u.permissions_json FROM auth_sessions s
      JOIN app_users u ON u.id = s.user_id
      WHERE s.id = ? AND s.expires_at > ?`,
     [sessionId, now]
