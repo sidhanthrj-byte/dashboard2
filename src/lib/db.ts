@@ -1,6 +1,7 @@
 import { createClient, type InValue } from '@libsql/client'
 import type { Quote } from './types'
 import { fullPermissions, parsePermissions, permissionsForLegacyRole } from './permissions'
+import { hashPassword } from './password'
 
 let _client: ReturnType<typeof createClient> | null = null
 
@@ -837,12 +838,15 @@ export async function dbCreateUser(body: Record<string, unknown>) {
   const id = (body.id as string) || crypto.randomUUID()
   const bases = Array.isArray(body.bases) ? JSON.stringify(body.bases) : ((body.bases as string) ?? '[]')
   const { role, accessLevel, permissionsJson } = normaliseUserWrite(body)
+  // Optional password set at creation time by an admin.
+  const pw = typeof body.password === 'string' && body.password ? String(body.password) : null
+  const passwordHash = pw ? await hashPassword(pw) : null
   await db.execute(
-    `INSERT INTO app_users (id, name, email, city, access_level, role, permissions_json, bases, status, phone, notes)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+    `INSERT INTO app_users (id, name, email, city, access_level, role, permissions_json, bases, status, phone, notes, password_hash)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
     [id, (body.name as string) ?? '', (body.email as string) ?? null, (body.city as string) ?? null,
      accessLevel, role, permissionsJson, bases, (body.status as string) ?? 'active',
-     (body.phone as string) ?? null, (body.notes as string) ?? null],
+     (body.phone as string) ?? null, (body.notes as string) ?? null, passwordHash],
   )
   const r = await db.execute('SELECT * FROM app_users WHERE id = ?', [id])
   return r.rows[0]
@@ -861,8 +865,21 @@ export async function dbUpdateUser(id: string, body: Record<string, unknown>) {
      accessLevel, role, permissionsJson, bases, (body.status as string) ?? 'active',
      (body.phone as string) ?? null, (body.notes as string) ?? null, id],
   )
+  // A blank password on edit leaves the existing one untouched; a non-blank
+  // value resets it. Handled separately so we never clobber a hash by accident.
+  if (typeof body.password === 'string' && body.password) {
+    await dbSetUserPassword(id, String(body.password))
+  }
   const r = await db.execute('SELECT * FROM app_users WHERE id = ?', [id])
   return r.rows[0]
+}
+
+// Set (or reset) a user's password. Stores a scrypt hash — never plaintext.
+export async function dbSetUserPassword(userId: string, password: string) {
+  await initAuthTables()
+  const db = getClient()
+  const hash = await hashPassword(password)
+  await db.execute('UPDATE app_users SET password_hash = ? WHERE id = ?', [hash, userId])
 }
 
 export async function dbDeleteUser(id: string) {

@@ -4,6 +4,9 @@ import { useRouter, useSearchParams } from 'next/navigation'
 
 function LoginForm() {
   const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [firstTime, setFirstTime] = useState(false) // account has no password yet
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const router = useRouter()
@@ -12,15 +15,26 @@ function LoginForm() {
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
-    setLoading(true)
     setError('')
+    if (firstTime) {
+      if (password.length < 8) { setError('Password must be at least 8 characters.'); return }
+      if (password !== confirm) { setError('Passwords do not match.'); return }
+    }
+    setLoading(true)
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: email.toLowerCase().trim() }),
+      body: JSON.stringify({ email: email.toLowerCase().trim(), password }),
     })
     const data = await res.json()
     if (!res.ok) {
+      // The account exists but has never set a password → switch to setup mode.
+      if (data.firstTime) {
+        setFirstTime(true)
+        setError(firstTime ? (data.error ?? 'Login failed') : '')
+        setLoading(false)
+        return
+      }
       setError(data.error ?? 'Login failed')
       setLoading(false)
       return
@@ -51,7 +65,11 @@ function LoginForm() {
           </div>
 
           <form onSubmit={handleLogin} className="px-6 py-6 space-y-5">
-            <p className="text-[13.5px]" style={{ color: 'var(--ink-3)' }}>Enter your registered email to open your workspace.</p>
+            <p className="text-[13.5px]" style={{ color: 'var(--ink-3)' }}>
+              {firstTime
+                ? 'First sign-in: create a password to secure your account.'
+                : 'Enter your email and password to open your workspace.'}
+            </p>
             <div>
               <label className="label" htmlFor="login-email">Email address</label>
               <input
@@ -64,8 +82,39 @@ function LoginForm() {
                 required
                 autoFocus
                 autoComplete="email"
+                readOnly={firstTime}
               />
             </div>
+
+            <div>
+              <label className="label" htmlFor="login-password">{firstTime ? 'New password' : 'Password'}</label>
+              <input
+                id="login-password"
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                className="input"
+                placeholder={firstTime ? 'At least 8 characters' : '••••••••'}
+                required
+                autoComplete={firstTime ? 'new-password' : 'current-password'}
+              />
+            </div>
+
+            {firstTime && (
+              <div>
+                <label className="label" htmlFor="login-confirm">Confirm password</label>
+                <input
+                  id="login-confirm"
+                  type="password"
+                  value={confirm}
+                  onChange={e => setConfirm(e.target.value)}
+                  className="input"
+                  placeholder="Re-enter password"
+                  required
+                  autoComplete="new-password"
+                />
+              </div>
+            )}
 
             {error && (
               <div className="flex items-start gap-2 rounded-[3px] px-3.5 py-2.5 text-[13px] animate-fade-in" role="alert"
@@ -80,13 +129,13 @@ function LoginForm() {
               </div>
             )}
 
-            <button type="submit" disabled={loading || !email} className="btn-primary btn-lg w-full">
+            <button type="submit" disabled={loading || !email || !password} className="btn-primary btn-lg w-full">
               {loading ? (
                 <>
                   <svg className="animate-spin" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56" strokeLinecap="round"/></svg>
-                  Signing in…
+                  {firstTime ? 'Setting password…' : 'Signing in…'}
                 </>
-              ) : 'Continue'}
+              ) : firstTime ? 'Set password & sign in' : 'Sign in'}
             </button>
           </form>
 

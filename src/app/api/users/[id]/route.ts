@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { getDbClient, dbUpdateUser, dbDeleteUser, dbLogActivity } from '@/lib/db'
 import { requireAdmin } from '@/lib/session'
+import { MIN_PASSWORD_LENGTH } from '@/lib/password'
 
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   const auth = await requireAdmin()
@@ -18,6 +19,9 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   const auth = await requireAdmin()
   if ('error' in auth) return auth.error
   const body = await req.json()
+  if (typeof body.password === 'string' && body.password && body.password.length < MIN_PASSWORD_LENGTH) {
+    return NextResponse.json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` }, { status: 400 })
+  }
   const updated = await dbUpdateUser(params.id, body)
   await dbLogActivity(auth.user.userId, 'user.update', `Updated user ${params.id}`)
   return NextResponse.json(updated)
