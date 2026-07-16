@@ -109,20 +109,19 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
     <div className="card overflow-hidden">
       {/* Item header */}
       <div
-        className="flex items-center justify-between px-5 py-3.5 cursor-pointer transition-colors"
-        style={{ background: 'var(--sheet-2)', borderBottom: '1px solid var(--rule)' }}
+        className="flex items-center justify-between px-5 py-3.5 cursor-pointer bg-slate-50 border-b border-slate-100 hover:bg-slate-100 transition-colors"
         onClick={() => setOpen(o => !o)}
       >
         <div className="flex items-center gap-3">
-          <span className="font-mono text-[11px] font-medium shrink-0" style={{ color: 'var(--accent)' }}>
-            {String(index + 1).padStart(2, '0')}
+          <span className="w-6 h-6 rounded-full bg-slate-800 text-white text-xs font-bold flex items-center justify-center shrink-0">
+            {index + 1}
           </span>
           <div>
-            <span className="font-display font-semibold text-[14px]" style={{ color: 'var(--ink)' }}>
-              {item.name || `Ceiling ${index + 1}`}
+            <span className="font-semibold text-slate-800 text-sm">
+              {item.name || `Ceiling Item ${index + 1}`}
             </span>
             {!open && (d.dim1 > 0 || d.dim2 > 0) && (
-              <span className="fig text-[11px] ml-2.5" style={{ color: 'var(--muted)' }}>
+              <span className="text-xs text-slate-500 ml-2">
                 {d.dim1} × {d.dim2} {item.unit} · {item.fabricType}
               </span>
             )}
@@ -160,7 +159,7 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
                     onClick={() => onChange({ ...item, surface: s, gripperType: s === 'ceiling' ? 'CW' : 'CC' })}
                     className={`flex-1 py-2 rounded-lg border text-xs font-semibold transition-all ${
                       item.surface === s
-                        ? 'border-[color:var(--ink)] bg-white text-[color:var(--ink)] shadow-[inset_3px_0_0_var(--accent)]'
+                        ? 'border-slate-700 bg-slate-800 text-white'
                         : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
                     }`}
                   >
@@ -313,7 +312,7 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
                     onClick={() => set('jointType', j)}
                     className={`px-3 py-2 rounded-lg border text-xs font-semibold transition-all ${
                       item.jointType === j
-                        ? 'border-[color:var(--ink)] bg-white text-[color:var(--ink)] shadow-[inset_3px_0_0_var(--accent)]'
+                        ? 'border-slate-700 bg-slate-800 text-white'
                         : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
                     }`}
                   >
@@ -421,7 +420,7 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
                   }}
                   className={`p-3 rounded-lg border text-left transition-all ${
                     item.lightType === opt.value
-                      ? 'border-[color:var(--ink)] bg-white text-[color:var(--ink)] shadow-[inset_3px_0_0_var(--accent)]'
+                      ? 'border-slate-700 bg-slate-800 text-white'
                       : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
                   }`}
                 >
@@ -444,7 +443,7 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
                       onClick={() => set('lightDepth', d)}
                       className={`px-3 py-1.5 rounded-lg border text-sm font-semibold transition-all ${
                         item.lightDepth === d
-                          ? 'border-[color:var(--ink)] bg-white text-[color:var(--ink)] shadow-[inset_3px_0_0_var(--accent)]'
+                          ? 'border-slate-700 bg-slate-800 text-white'
                           : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
                       }`}
                     >
@@ -465,7 +464,7 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
                       onClick={() => set('ledWidth', w)}
                       className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all ${
                         item.ledWidth === w
-                          ? 'border-[color:var(--ink)] bg-white text-[color:var(--ink)] shadow-[inset_3px_0_0_var(--accent)]'
+                          ? 'border-slate-700 bg-slate-800 text-white'
                           : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
                       }`}
                     >
@@ -483,7 +482,7 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
                         onClick={() => set('daliDriver', val)}
                         className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all ${
                           (item.daliDriver ?? 'dt8') === val
-                            ? 'border-[color:var(--ink)] bg-white text-[color:var(--ink)] shadow-[inset_3px_0_0_var(--accent)]'
+                            ? 'border-slate-700 bg-slate-800 text-white'
                             : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
                         }`}
                       >{label}</button>
@@ -510,7 +509,7 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
                         onClick={() => onChange({ ...item, preferredDriverWatt: val, driverOverrides: {} })}
                         className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
                           (item.preferredDriverWatt ?? undefined) === val
-                            ? 'border-[color:var(--ink)] bg-white text-[color:var(--ink)] shadow-[inset_3px_0_0_var(--accent)]'
+                            ? 'border-slate-700 bg-slate-800 text-white'
                             : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
                         }`}
                       >{label}</button>
@@ -528,7 +527,7 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
                       onClick={() => onChange({ ...item, lightingConfig: val, driverOverrides: {} })}
                       className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
                         (item.lightingConfig ?? 'non_looped') === val
-                          ? 'border-[color:var(--ink)] bg-white text-[color:var(--ink)] shadow-[inset_3px_0_0_var(--accent)]'
+                          ? 'border-slate-700 bg-slate-800 text-white'
                           : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
                       }`}
                     >{label}</button>
@@ -550,7 +549,7 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
                         onClick={() => set('ledModuleType', val)}
                         className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
                           (item.ledModuleType ?? 'standard') === val
-                            ? 'border-[color:var(--ink)] bg-white text-[color:var(--ink)] shadow-[inset_3px_0_0_var(--accent)]'
+                            ? 'border-slate-700 bg-slate-800 text-white'
                             : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
                         }`}
                       >{label}</button>

@@ -41,23 +41,26 @@ export default function MainNav() {
 
   return (
     <>
-      {/* Desktop nav — title-block tabs */}
+      {/* Desktop nav */}
       <nav className="hidden lg:flex items-center gap-0.5">
         {links.map(({ href, label }) => {
           const active = isActive(pathname, href)
           return (
             <a key={href} href={href}
-              className="relative font-mono text-[11px] uppercase px-2.5 py-1.5 transition-colors"
-              style={{ color: active ? 'var(--ink)' : 'var(--muted)', letterSpacing: '0.08em', fontWeight: 500 }}
+              className={`relative text-xs font-medium px-3 py-2 rounded-lg transition-colors ${
+                active ? 'text-stone-900' : 'text-stone-500 hover:text-stone-900 hover:bg-stone-100'
+              }`}
             >
               {label}
-              {active && <span className="absolute left-2.5 right-2.5 -bottom-[8px] h-[1.5px]" style={{ background: 'var(--accent)' }} />}
+              {active && <span className="absolute left-3 right-3 -bottom-[7px] h-0.5 rounded-full bg-emerald-600" />}
             </a>
           )
         })}
-        <div className="w-px h-4 mx-2.5" style={{ background: 'var(--rule-2)' }} />
-        <NotificationBell />
+        <div className="mx-1"><NotificationBell /></div>
         <UserMenu />
+        <a href="/quotes/new" className="btn-primary text-xs px-3 py-2 gap-1.5 ml-1">
+          <Plus size={14} /> New Quote
+        </a>
       </nav>
 
       {/* Mobile controls */}
@@ -65,36 +68,31 @@ export default function MainNav() {
         <NotificationBell />
         <UserMenu />
         <button onClick={() => setOpen(v => !v)} aria-label="Menu"
-          className="w-9 h-9 flex items-center justify-center rounded-[3px] transition-colors hover:bg-[color:var(--sheet-2)]"
-          style={{ color: 'var(--ink-2)' }}>
+          className="w-9 h-9 flex items-center justify-center rounded-lg text-stone-600 hover:bg-stone-100 transition-colors">
           {open ? <X size={18} /> : <Menu size={18} />}
         </button>
       </div>
 
       {/* Mobile drawer */}
       {open && (
-        <div className="lg:hidden fixed inset-0 top-[56px] z-40 animate-fade-in" style={{ background: 'rgba(28,25,21,0.16)' }} onClick={() => setOpen(false)}>
-          <div className="p-3 animate-slide-up" style={{ background: 'var(--sheet)', borderBottom: '1px solid var(--rule-2)' }} onClick={e => e.stopPropagation()}>
-            <div className="grid grid-cols-2 gap-1">
+        <div className="lg:hidden fixed inset-0 top-[60px] z-40 bg-black/20 backdrop-blur-sm animate-fade-in" onClick={() => setOpen(false)}>
+          <div className="bg-white border-b border-stone-200 shadow-lg p-3 animate-slide-up" onClick={e => e.stopPropagation()}>
+            <div className="grid grid-cols-2 gap-1.5">
               {links.map(({ href, label, icon: Icon }) => {
                 const active = isActive(pathname, href)
                 return (
                   <a key={href} href={href} onClick={() => setOpen(false)}
-                    className="flex items-center gap-2.5 px-3 py-2.5 rounded-[3px] font-mono text-[12px] uppercase transition-colors"
-                    style={{
-                      color: active ? 'var(--ink)' : 'var(--muted)',
-                      background: active ? 'var(--sheet-2)' : 'transparent',
-                      letterSpacing: '0.06em', fontWeight: 500,
-                      boxShadow: active ? 'inset 3px 0 0 var(--accent)' : 'none',
-                    }}
+                    className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+                      active ? 'bg-emerald-50 text-emerald-700' : 'text-stone-600 hover:bg-stone-100'
+                    }`}
                   >
-                    <Icon size={15} strokeWidth={1.9} /> {label}
+                    <Icon size={16} /> {label}
                   </a>
                 )
               })}
             </div>
-            <a href="/quotes/new" onClick={() => setOpen(false)} className="btn-primary w-full mt-2 justify-center">
-              <Plus size={16} /> New quote
+            <a href="/quotes/new" onClick={() => setOpen(false)} className="btn-primary w-full mt-2 py-2.5">
+              <Plus size={16} /> New Quote
             </a>
           </div>
         </div>

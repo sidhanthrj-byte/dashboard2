@@ -17,7 +17,7 @@ export default function Gate({
   const { me, loading } = useMe()
 
   if (loading) {
-    return <div className="flex items-center justify-center h-64 text-sm" style={{ color: 'var(--faint)' }}>Loading…</div>
+    return <div className="flex items-center justify-center h-64 text-sm text-stone-400">Loading…</div>
   }
 
   const allowed = !me ? false : admin ? me.isAdmin : module ? can(me, module, 'view') : true
@@ -25,13 +25,13 @@ export default function Gate({
   if (!allowed) {
     return (
       <div className="py-24 text-center animate-fade-in">
-        <div className="fig text-[11px] uppercase mb-3" style={{ color: 'var(--faint)', letterSpacing: '0.14em' }}>
+        <div className="text-[11px] font-semibold uppercase tracking-widest text-stone-400 mb-3">
           Restricted
         </div>
-        <p className="font-display text-[19px] font-semibold" style={{ color: 'var(--ink)' }}>
+        <p className="font-bold text-stone-900 text-lg">
           You don’t have access to this section
         </p>
-        <p className="text-[13.5px] mt-2" style={{ color: 'var(--muted)' }}>
+        <p className="text-sm text-stone-500 mt-2">
           Ask an administrator to grant you permission.
         </p>
         <a href="/quotes" className="btn-primary mt-6 inline-flex">Go to Quotes</a>

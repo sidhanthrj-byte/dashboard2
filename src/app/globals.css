@@ -1,236 +1,144 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800;0,14..32,900;1,14..32,400&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 * { box-sizing: border-box; }
 
-/* ===========================================================================
-   DRAFTING TABLE — tokens
-   Warm paper, graphite ink, one redline accent. Figures in engineering mono.
-   =========================================================================== */
 :root {
-  /* Paper (grounds) */
-  --paper: #f4f0e7;          /* app canvas — drafting paper */
-  --sheet: #fbf9f3;          /* raised sheet / fields */
-  --sheet-2: #ece6d8;        /* sunken / hover */
-  /* Ink (the drawing) */
-  --ink: #1c1915;            /* headings, primary text */
-  --ink-2: #3d382e;          /* body */
-  --ink-3: #5f5844;          /* secondary */
-  --muted: #847b62;          /* labels, meta */
-  --faint: #b3a98f;          /* captions, disabled */
-  /* Graphite rules */
-  --rule: #ded6c4;           /* hairline */
-  --rule-2: #cbc0a6;         /* stronger rule */
-  /* Redline (the annotation — used sparingly) */
-  --accent: #c3341c;
-  --accent-ink: #a3260f;
-  --accent-wash: #f7e9e3;
-  /* Quiet semantics */
-  --slate: #3c5a73;
-  --olive: #6a6a2e;
-  --forest: #4a6b4e;
+  /* Text hierarchy */
+  --ink: #0a0a0a;          /* primary — almost black */
+  --ink-2: #1c1917;
+  --ink-3: #44403c;
+  --muted: #78716c;        /* secondary — warm neutral gray */
+  --subtle: #a8a29e;       /* muted — soft warm gray */
+  /* Surfaces */
+  --border: #ececea;       /* extremely subtle */
+  --border-light: #f5f5f4;
+  --surface: #ffffff;      /* cards — pure white */
+  --bg: #fafaf9;           /* soft warm off-white */
+  --bg-2: #f5f5f4;         /* secondary background */
+  /* Accents (used sparingly) */
+  --accent: #047857;       /* deep emerald — primary */
+  --accent-hover: #065f46;
+  --accent-soft: #ecfdf5;
+  --emerald: #059669;
+  --slate: #475569;        /* secondary accent */
+  --blue: #2563eb;
+  --violet: #7c3aed;
+  --rose: #e11d48;
+  --amber: #d97706;
   /* Motion */
-  --mech: cubic-bezier(0.2, 0, 0, 1);
-  --out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
-
-html { -webkit-tap-highlight-color: transparent; }
 
 body {
   font-family: 'Inter', system-ui, sans-serif;
-  background: var(--paper);
-  color: var(--ink-2);
+  background: var(--bg);
+  color: var(--ink);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  letter-spacing: -0.006em;
-  line-height: 1.5;
-  font-feature-settings: 'cv05', 'cv08', 'ss01';
-}
-
-h1, h2, h3, h4, .font-display {
-  font-family: 'Space Grotesk', 'Inter', sans-serif;
-  color: var(--ink);
-  letter-spacing: -0.02em;
-  font-weight: 600;
-}
-
-/* Engineering figures — tabular monospace for every number that must line up */
-.fig, .nums, .tabular {
-  font-family: 'IBM Plex Mono', ui-monospace, monospace;
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: 'tnum' 1, 'zero' 1;
-  letter-spacing: 0.01em;
-}
-
-::selection { background: rgba(195, 52, 28, 0.16); color: var(--accent-ink); }
-
-/* Focus — a redline tick around the target. Deliberate, never fuzzy. */
-:where(a, button, input, select, textarea, [tabindex]):focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-  border-radius: 2px;
+  letter-spacing: -0.011em;
 }
 
 @layer components {
-
-  /* ---- Title-block field labels: mono, uppercase, drafting ---- */
-  .label {
-    @apply block mb-1.5 text-[10.5px] font-medium uppercase;
-    font-family: 'IBM Plex Mono', ui-monospace, monospace;
-    letter-spacing: 0.12em;
-    color: var(--muted);
-  }
-  .eyebrow {
-    @apply text-[10.5px] font-medium uppercase;
-    font-family: 'IBM Plex Mono', ui-monospace, monospace;
-    letter-spacing: 0.14em;
-    color: var(--faint);
-  }
-
-  /* ---- Buttons — pressed metal, minimal radius ---- */
   .btn {
-    @apply inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-[3px] text-[13px] font-medium leading-none cursor-pointer select-none;
-    transition: background .13s var(--mech), color .13s var(--mech), border-color .13s var(--mech), opacity .13s var(--mech);
-    @apply focus:outline-none focus-visible:outline-none disabled:opacity-40 disabled:pointer-events-none;
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-semibold text-sm transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 cursor-pointer select-none leading-none active:scale-[0.98];
   }
-  .btn-sm { @apply px-2.5 py-1.5 text-[12px] gap-1; }
-  .btn-lg { @apply px-5 py-2.5 text-sm; }
-
-  .btn-primary { @apply btn text-[color:var(--paper)]; background: var(--ink); }
-  .btn-primary:hover { background: #322d23; }
-  .btn-primary:active { background: var(--ink); }
-
-  .btn-accent { @apply btn text-white; background: var(--accent); }
-  .btn-accent:hover { background: var(--accent-ink); }
-
-  .btn-secondary {
-    @apply btn bg-transparent text-[color:var(--ink-2)] border;
-    border-color: var(--rule-2);
-  }
-  .btn-secondary:hover { background: var(--sheet); border-color: var(--ink-3); }
-
-  .btn-ghost { @apply btn bg-transparent text-[color:var(--muted)]; }
-  .btn-ghost:hover { background: var(--sheet-2); color: var(--ink); }
-
-  .btn-danger { @apply btn bg-transparent border; color: var(--accent); border-color: #e2b6ab; }
-  .btn-danger:hover { background: var(--accent-wash); }
-
-  /* ---- Sheets / cards — paper on paper, hairline edge, no float ---- */
-  .card, .sheet {
-    @apply rounded-[4px] border;
-    background: var(--sheet);
-    border-color: var(--rule);
-  }
-  .card-hover { @apply transition-colors duration-150; }
-  .rule { border-color: var(--rule); }
-
-  /* ---- Inputs — recessed cells on the sheet ---- */
-  .input {
-    @apply w-full px-3 py-2 text-[13.5px] rounded-[3px] border bg-white;
-    border-color: var(--rule-2);
-    color: var(--ink);
-    transition: border-color .13s var(--mech), box-shadow .13s var(--mech);
-  }
-  .input::placeholder { color: var(--faint); }
-  .input:hover { border-color: #beb499; }
-  .input:focus {
-    outline: none;
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px var(--accent-wash);
-  }
-  input[type="number"].input, .input.fig { font-family: 'IBM Plex Mono', ui-monospace, monospace; letter-spacing: 0.01em; }
-  textarea.input { @apply leading-relaxed; }
-
-  .select {
-    @apply input appearance-none cursor-pointer pr-9;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23847b62' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 0.6rem center;
-  }
-
-  /* ---- Badges — mono annotations with a dot, like drawing callouts ---- */
-  .badge {
-    @apply inline-flex items-center gap-1.5 text-[11px] font-medium uppercase;
-    font-family: 'IBM Plex Mono', ui-monospace, monospace;
-    letter-spacing: 0.06em;
-    color: var(--muted);
-  }
-  .badge::before { content: ''; width: 5px; height: 5px; border-radius: 1px; background: currentColor; }
-  .badge-draft     { @apply badge; color: var(--faint); }
-  .badge-sent      { @apply badge; color: var(--slate); }
-  .badge-approved  { @apply badge; color: var(--forest); }
-  .badge-rejected  { @apply badge; color: var(--accent); }
-  .badge-dealer    { @apply badge; color: var(--violet, #5a5170); }
-  .badge-msp       { @apply badge; color: var(--slate); }
-  .badge-specifiors { @apply badge; color: var(--olive); }
-
-  /* ---- Segmented tabs — selection carried by a redline tick ---- */
-  .seg {
-    @apply relative text-[13px] font-medium px-2.5 py-1.5 transition-colors duration-150;
-    color: var(--muted);
-  }
-  .seg:hover { color: var(--ink); }
-  .seg-on { color: var(--ink); }
-  .seg-on::after {
-    content: ''; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 1.5px;
+  .btn-primary {
+    @apply btn text-white shadow-sm;
     background: var(--accent);
   }
-
-  /* ---- Option cells — bordered choices (tier / surface / lighting) ---- */
-  .opt {
-    @apply relative text-left rounded-[3px] border px-3 py-2.5 transition-all duration-150 cursor-pointer;
-    border-color: var(--rule-2); background: var(--sheet);
-    color: var(--ink-3);
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-primary:focus-visible { --tw-ring-color: var(--accent); }
+  .btn-secondary {
+    @apply btn bg-white border border-stone-200 text-stone-700 hover:bg-stone-50 hover:border-stone-300 focus-visible:ring-stone-300 shadow-sm;
   }
-  .opt:hover { border-color: var(--ink-3); }
-  .opt-on {
-    border-color: var(--ink); background: #fff; color: var(--ink);
-    box-shadow: inset 3px 0 0 var(--accent);
+  .btn-danger {
+    @apply btn bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 focus-visible:ring-rose-200;
   }
+  .btn-ghost {
+    @apply btn text-stone-500 hover:bg-stone-100 hover:text-stone-800 focus-visible:ring-stone-200;
+  }
+  .card {
+    @apply bg-white rounded-2xl border shadow-[0_1px_2px_0_rgb(0,0,0,0.03),0_1px_3px_0_rgb(0,0,0,0.04)];
+    border-color: var(--border);
+  }
+  .card-hover {
+    @apply card transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_24px_-6px_rgb(0,0,0,0.10),0_2px_6px_-2px_rgb(0,0,0,0.05)];
+  }
+  .card-hover:hover { border-color: #e2e0dd; }
+  .input {
+    @apply w-full px-3.5 py-2.5 text-sm rounded-xl border bg-white focus:outline-none focus:ring-2 placeholder:text-stone-400 transition-all;
+    border-color: var(--border);
+  }
+  .input:focus { --tw-ring-color: rgba(4,120,87,0.18); border-color: #6ee7b7; }
+  .label {
+    @apply block text-[11px] font-semibold text-stone-500 uppercase tracking-widest mb-1.5;
+  }
+  .select {
+    @apply input appearance-none cursor-pointer;
+  }
+  .badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold tracking-wide;
+  }
+  .badge-draft     { @apply badge bg-stone-100 text-stone-600; }
+  .badge-sent      { @apply badge bg-blue-50 text-blue-700; }
+  .badge-approved  { @apply badge bg-emerald-50 text-emerald-700; }
+  .badge-rejected  { @apply badge bg-rose-50 text-rose-600; }
+  .badge-dealer    { @apply badge bg-violet-50 text-violet-700; }
+  .badge-msp       { @apply badge bg-sky-50 text-sky-700; }
+  .badge-specifiors { @apply badge bg-amber-50 text-amber-700; }
 
-  .stat-card { @apply relative; }
-  .hairline { border-top: 1px solid var(--rule); }
-  .divider-v { border-left: 1px solid var(--rule); }
+  .stat-card {
+    @apply card p-5 relative overflow-hidden transition-all duration-200 hover:shadow-[0_8px_24px_-6px_rgb(0,0,0,0.08)];
+  }
 }
 
-/* ---- Motion — fast, mechanical ---- */
+/* Premium motion primitives */
 @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
-@keyframes rise { from { opacity: 0; transform: translateY(5px) } to { opacity: 1; transform: translateY(0) } }
-@keyframes popIn { from { opacity: 0; transform: scale(0.98) } to { opacity: 1; transform: scale(1) } }
+@keyframes slideUp { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: translateY(0) } }
+@keyframes scaleIn { from { opacity: 0; transform: scale(0.97) } to { opacity: 1; transform: scale(1) } }
 @keyframes shimmer { 100% { transform: translateX(100%) } }
-.animate-fade-in { animation: fadeIn 0.16s var(--mech) both; }
-.animate-slide-up { animation: rise 0.22s var(--out) both; }
-.animate-scale-in { animation: popIn 0.14s var(--out) both; }
+.animate-fade-in { animation: fadeIn 0.25s var(--ease) both; }
+.animate-slide-up { animation: slideUp 0.32s var(--ease-out) both; }
+.animate-scale-in { animation: scaleIn 0.2s var(--ease-out) both; }
 
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
-}
-
+/* Shimmer skeleton */
 .skeleton {
-  position: relative; overflow: hidden;
-  background: var(--sheet-2); border-radius: 3px;
+  position: relative;
+  overflow: hidden;
+  background: var(--bg-2);
 }
 .skeleton::after {
-  content: ''; position: absolute; inset: 0; transform: translateX(-100%);
+  content: '';
+  position: absolute; inset: 0;
+  transform: translateX(-100%);
   background: linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent);
-  animation: shimmer 1.4s infinite;
+  animation: shimmer 1.5s infinite;
 }
 
-::-webkit-scrollbar { width: 11px; height: 11px; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #cbc0a6; border-radius: 0; border: 3px solid var(--paper); background-clip: padding-box; }
-::-webkit-scrollbar-thumb:hover { background: #b3a98f; border: 3px solid var(--paper); background-clip: padding-box; }
+::-webkit-scrollbar-thumb { background: #d6d3d1; border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: #a8a29e; }
 
-.pdf-mobile-outer { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-.pdf-mobile-outer > #quote-printable { width: 794px; }
+/* Mobile PDF viewer — horizontally scrollable with proportional scale hint */
+.pdf-mobile-outer {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.pdf-mobile-outer > #quote-printable {
+  width: 794px;
+}
 
 @media print {
   .no-print { display: none !important; }
   body { background: white; }
-  .card, .sheet { box-shadow: none !important; border: none !important; }
+  .card { box-shadow: none !important; border: none !important; }
   .print-break { page-break-before: always; }
-  header, footer { display: none !important; }
+  header { display: none !important; }
+  footer { display: none !important; }
   main { padding: 0 !important; max-width: 100% !important; }
 }
