@@ -7,11 +7,15 @@ import { fmtINR, calculateQuote } from '@/lib/calculations'
 import { listCompanies } from '@/lib/companies'
 
 const TIER_LABEL: Record<string, string> = { dealer: 'Dealer', msp: 'MSP', specifiors: 'Specifiors' }
+const TIER_CLASS: Record<string, string> = { dealer: 'badge-dealer', msp: 'badge-msp', specifiors: 'badge-specifiors' }
 
 type QuoteStatus = 'draft' | 'sent' | 'approved' | 'rejected'
 const STATUS_LABELS: Record<QuoteStatus, string> = { draft: 'Draft', sent: 'Sent', approved: 'Approved', rejected: 'Rejected' }
+const STATUS_CLASS: Record<QuoteStatus, string> = {
+  draft: 'badge-draft', sent: 'badge-sent', approved: 'badge-approved', rejected: 'badge-rejected',
+}
 const STATUS_DOT: Record<QuoteStatus, string> = {
-  draft: 'var(--faint)', sent: 'var(--slate)', approved: 'var(--forest)', rejected: 'var(--accent)',
+  draft: 'bg-stone-400', sent: 'bg-blue-500', approved: 'bg-emerald-500', rejected: 'bg-rose-500',
 }
 
 function getStatus(quote: Quote): QuoteStatus {
@@ -133,122 +137,108 @@ export default function QuoteRegister({ variant = 'dashboard' }: { variant?: 'da
   const firstName = me?.name ? me.name.split(' ')[0] : null
 
   const metrics = [
-    { label: isAdmin ? 'Quotes on file' : 'My quotes', value: String(quotes.length) },
-    { label: 'Pipeline', value: fmtINR(totals.value) },
-    { label: 'Won', value: fmtINR(approvedValue), meta: `${conversionRate}% conv.` },
-    { label: 'This month', value: fmtINR(thisMonthValue) },
+    { label: isAdmin ? 'Total Quotes' : 'My Quotes', value: String(quotes.length) },
+    { label: 'Pipeline Value', value: fmtINR(totals.value) },
+    { label: 'Won', value: fmtINR(approvedValue), meta: `${conversionRate}% conversion` },
+    { label: 'This Month', value: fmtINR(thisMonthValue) },
   ]
 
-  const eyebrow = variant === 'quotes' ? 'Quotes' : 'Register'
   const heading = variant === 'quotes'
-    ? (firstName && !isAdmin ? `${firstName}’s quotes` : 'Quotes')
-    : (isAdmin ? 'Quotations' : firstName ? `${firstName}’s desk` : 'My quotations')
+    ? (firstName && !isAdmin ? `${firstName}'s Quotes` : 'Quotes')
+    : (isAdmin ? 'Quotations' : firstName ? `${firstName}'s Desk` : 'My Quotations')
 
   return (
     <div className="animate-fade-in">
 
-      {/* Register header */}
-      <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-5 pt-8 sm:pt-12 pb-7">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
-          <div className="eyebrow mb-2.5">{eyebrow}</div>
-          <h1 className="font-display text-[32px] sm:text-[38px] font-semibold leading-none tracking-tight" style={{ color: 'var(--ink)' }}>
-            {heading}
-          </h1>
-          <p className="text-[14px] mt-3" style={{ color: 'var(--muted)' }}>
+          <h1 className="text-2xl sm:text-3xl font-black text-stone-900 tracking-tight">{heading}</h1>
+          <p className="text-sm text-stone-500 mt-1">
             {loading ? 'Loading…'
-              : quotes.length === 0 ? 'No records yet'
-              : `${quotes.length} record${quotes.length !== 1 ? 's' : ''}${recentCount > 0 ? ` · ${recentCount} this week` : ''}`}
+              : quotes.length === 0 ? 'No quotations yet'
+              : `${quotes.length} quotation${quotes.length !== 1 ? 's' : ''}${recentCount > 0 ? ` · ${recentCount} this week` : ''}`}
           </p>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center" style={{ borderBottom: '1px solid var(--rule)' }}>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center bg-stone-100 rounded-xl p-0.5">
             {companies.map(c => (
               <button key={c.id} onClick={() => setCompanyFilter(c.id)}
-                className={`seg ${companyFilter === c.id ? 'seg-on' : ''}`}>{c.label}</button>
+                className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${
+                  companyFilter === c.id ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-800'
+                }`}>{c.label}</button>
             ))}
           </div>
-          <a href="/quotes/new" className="btn-primary"><Plus size={15} /> New quote</a>
+          <a href="/quotes/new" className="btn-primary text-sm"><Plus size={16} /> New Quote</a>
         </div>
-      </header>
+      </div>
 
-      {/* Title-block metrics strip */}
+      {/* Stat cards */}
       {showStats && (
-        <section className="grid grid-cols-2 md:grid-cols-4"
-          style={{ borderTop: '1px solid var(--rule-2)', borderBottom: '1px solid var(--rule-2)' }}>
-          {metrics.map((m, i) => (
-            <div key={m.label} className="py-5 pr-6"
-              style={{ borderLeft: i === 0 ? 'none' : '1px solid var(--rule)', paddingLeft: i === 0 ? 0 : '1.5rem' }}>
-              <div className="label mb-2" style={{ marginBottom: 8 }}>{m.label}</div>
-              <div className="fig text-[24px] sm:text-[26px] font-medium leading-none" style={{ color: 'var(--ink)' }}>{m.value}</div>
-              {m.meta && <div className="fig text-[11px] mt-2" style={{ color: 'var(--faint)' }}>{m.meta}</div>}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
+          {metrics.map(m => (
+            <div key={m.label} className="stat-card">
+              <p className="label mb-1">{m.label}</p>
+              <p className="text-xl sm:text-2xl font-black text-stone-900 tracking-tight tabular-nums">{m.value}</p>
+              {m.meta && <p className="text-[11px] text-stone-400 font-medium mt-1">{m.meta}</p>}
             </div>
           ))}
-        </section>
+        </div>
       )}
 
       {/* Controls */}
-      <div className="flex items-center justify-between gap-4 mt-9 mb-1">
-        <div className="relative flex-1 max-w-sm">
-          <Search size={15} className="absolute left-0 top-1/2 -translate-y-1/2" style={{ color: 'var(--faint)' }} />
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4">
+        <div className="relative flex-1 max-w-md">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" />
           <input
-            className="w-full bg-transparent border-0 pl-6 pr-3 py-2.5 text-[14px] focus:outline-none"
-            style={{ color: 'var(--ink)' }}
-            placeholder="Search records…"
+            className="input pl-9"
+            placeholder="Search quotations…"
             value={search} onChange={e => setSearch(e.target.value)}
           />
         </div>
         {showStats && (
-          <div className="hidden sm:flex items-center" style={{ borderBottom: '1px solid var(--rule)' }}>
-            <button onClick={() => setStatusFilter('all')} className={`seg ${statusFilter === 'all' ? 'seg-on' : ''}`}>All</button>
+          <div className="flex items-center gap-1.5 overflow-x-auto">
+            <button onClick={() => setStatusFilter('all')}
+              className={`text-xs font-semibold px-3 py-1.5 rounded-lg whitespace-nowrap transition-colors ${
+                statusFilter === 'all' ? 'bg-stone-900 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+              }`}>All</button>
             {statusCounts.map(({ s, n }) => (
               <button key={s} onClick={() => setStatusFilter(prev => prev === s ? 'all' : s)}
-                className={`seg flex items-center gap-1.5 ${statusFilter === s ? 'seg-on' : ''}`}>
-                <span className="w-1.5 h-1.5 rounded-[1px]" style={{ background: STATUS_DOT[s] }} />
-                {STATUS_LABELS[s]}<span className="fig text-[11px]" style={{ color: 'var(--faint)' }}>{n}</span>
+                className={`text-xs font-semibold px-3 py-1.5 rounded-lg whitespace-nowrap flex items-center gap-1.5 transition-colors ${
+                  statusFilter === s ? 'bg-stone-900 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
+                }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[s]}`} />
+                {STATUS_LABELS[s]}<span className="text-stone-400">{n}</span>
               </button>
             ))}
           </div>
         )}
       </div>
 
-      {/* Ledger column header */}
-      {!loading && filtered.length > 0 && (
-        <div className="hidden md:flex items-center gap-4 px-3 py-2" style={{ borderBottom: '1px solid var(--rule-2)' }}>
-          <div className="flex-1 label mb-0">Client / Project</div>
-          <div className="w-28 label mb-0">Ref · Tier</div>
-          <div className="w-24 label mb-0">Status</div>
-          <div className="w-28 label mb-0 text-right">Amount</div>
-          <div className="w-[136px]" />
-        </div>
-      )}
-
-      {/* Ledger body */}
+      {/* Body */}
       {loading ? (
-        <div>
+        <div className="space-y-2">
           {[1, 2, 3, 4].map(i => (
-            <div key={i} className="flex items-center gap-4 py-4 px-3" style={{ borderBottom: '1px solid var(--rule)' }}>
-              <div className="flex-1 space-y-2.5"><div className="skeleton h-3.5 w-52" /><div className="skeleton h-2.5 w-32" /></div>
-              <div className="skeleton h-3.5 w-20" />
+            <div key={i} className="card p-4 flex items-center gap-4">
+              <div className="flex-1 space-y-2.5"><div className="skeleton h-3.5 w-52 rounded" /><div className="skeleton h-2.5 w-32 rounded" /></div>
+              <div className="skeleton h-3.5 w-20 rounded" />
             </div>
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="py-24 text-center">
-          <div className="fig text-[11px] uppercase mb-3" style={{ color: 'var(--faint)', letterSpacing: '0.14em' }}>
-            {search ? 'No matches' : statusFilter !== 'all' ? 'Empty view' : 'Blank sheet'}
-          </div>
-          <p className="font-display text-[19px] font-semibold" style={{ color: 'var(--ink)' }}>
+        <div className="card py-20 text-center">
+          <p className="font-bold text-stone-900 text-lg">
             {search ? 'Nothing matches that' : statusFilter !== 'all' ? `No ${STATUS_LABELS[statusFilter].toLowerCase()} quotes` : 'No quotations yet'}
           </p>
-          <p className="text-[13.5px] mt-2" style={{ color: 'var(--muted)' }}>
-            {!search && statusFilter === 'all' ? 'Draw up your first quotation to begin the register.' : search ? 'Try a different term.' : 'They’ll be listed here.'}
+          <p className="text-sm text-stone-500 mt-2">
+            {!search && statusFilter === 'all' ? 'Create your first quotation to get started.' : search ? 'Try a different term.' : "They'll be listed here."}
           </p>
           {!search && statusFilter === 'all' && (
-            <a href="/quotes/new" className="btn-primary mt-6 inline-flex"><Plus size={15} /> New quote</a>
+            <a href="/quotes/new" className="btn-primary mt-6 inline-flex text-sm"><Plus size={16} /> New Quote</a>
           )}
         </div>
       ) : (
-        <div>
+        <div className="space-y-2">
           {filtered.map(quote => (
             <QuoteRow key={quote.id} quote={quote}
               deleting={deleting === quote.id} duplicating={duplicating === quote.id} revising={revising === quote.id}
@@ -282,58 +272,51 @@ function QuoteRow({ quote, deleting, duplicating, revising, onDelete, onDuplicat
   try { grandTotal = calculateQuote(quote).grandTotal } catch {}
 
   return (
-    <div className="group flex items-center gap-4 py-4 px-3 transition-colors duration-150 hover:bg-[color:var(--sheet)]"
-      style={{ borderBottom: '1px solid var(--rule)' }}>
+    <div className="group card-hover p-4 flex items-center gap-4">
       {/* Client / project */}
       <a href={`/quotes/${quote.id}/team`} className="flex-1 min-w-0 block">
-        <div className="flex items-baseline gap-2.5">
-          <span className="text-[14.5px] font-medium truncate" style={{ color: 'var(--ink)' }}>{quote.clientName}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-bold text-stone-900 truncate">{quote.clientName}</span>
           {rev > 0 && (
-            <span className="fig text-[10px] uppercase shrink-0 px-1.5 py-0.5 rounded-[2px]"
-              style={{ color: 'var(--accent)', border: '1px solid var(--rule-2)', letterSpacing: '0.05em' }}>
+            <span className="text-[10px] font-semibold uppercase shrink-0 px-1.5 py-0.5 rounded border border-stone-200 text-emerald-700 tracking-wide">
               Rev {rev}
             </span>
           )}
-          <span className="fig text-[11px] shrink-0" style={{ color: 'var(--faint)' }}>{date}</span>
+          <span className="text-[11px] text-stone-400 font-medium shrink-0">{date}</span>
         </div>
-        <div className="flex items-center gap-2 mt-1 text-[12.5px]" style={{ color: 'var(--muted)' }}>
+        <div className="flex items-center gap-2 mt-1 text-xs text-stone-500">
           {quote.projectName && <span className="truncate">{quote.projectName}</span>}
-          {quote.projectName && quote.location && <span style={{ color: 'var(--rule-2)' }}>·</span>}
+          {quote.projectName && quote.location && <span className="text-stone-300">·</span>}
           {quote.location && <span className="truncate">{quote.location}</span>}
-          <span style={{ color: 'var(--rule-2)' }}>·</span>
-          <span className="fig shrink-0 text-[11px]">{itemCount} item{itemCount !== 1 ? 's' : ''}</span>
+          <span className="text-stone-300">·</span>
+          <span className="shrink-0">{itemCount} item{itemCount !== 1 ? 's' : ''}</span>
         </div>
       </a>
 
       {/* Ref / tier */}
       <div className="hidden md:block w-28 shrink-0">
-        <div className="fig text-[11.5px]" style={{ color: 'var(--ink-3)' }}>{quote.quoteNumber}</div>
-        <div className="fig text-[10px] uppercase mt-1" style={{ color: 'var(--faint)', letterSpacing: '0.06em' }}>
-          {quote.company ?? 'STC'} · {TIER_LABEL[quote.priceTier] ?? quote.priceTier}
-        </div>
+        <div className="text-xs font-semibold text-stone-600 tabular-nums">{quote.quoteNumber}</div>
+        <div className="mt-1"><span className={TIER_CLASS[quote.priceTier] ?? 'badge-dealer'}>{quote.company ?? 'STC'} · {TIER_LABEL[quote.priceTier] ?? quote.priceTier}</span></div>
       </div>
 
       {/* Status callout */}
       <div className="relative shrink-0 w-24 hidden sm:block">
         <button onClick={() => setMenu(v => !v)}
-          className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase px-1.5 py-1 rounded-[2px] transition-colors hover:bg-[color:var(--sheet-2)]"
-          style={{ color: 'var(--ink-2)', letterSpacing: '0.05em' }}>
-          <span className="w-1.5 h-1.5 rounded-[1px]" style={{ background: STATUS_DOT[status] }} />
+          className={`${STATUS_CLASS[status]} hover:opacity-80 transition-opacity`}>
+          <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[status]}`} />
           {STATUS_LABELS[status]}
-          <ChevronDown size={11} style={{ color: 'var(--faint)' }} />
+          <ChevronDown size={11} />
         </button>
         {menu && (
           <>
             <div className="fixed inset-0 z-10" onClick={() => setMenu(false)} />
-            <div className="absolute top-full left-0 mt-1 w-40 rounded-[3px] z-20 py-1 animate-scale-in origin-top-left"
-              style={{ background: 'var(--sheet)', border: '1px solid var(--rule-2)', boxShadow: 'var(--shadow-pop, 0 10px 34px -12px rgb(28 25 21 / 0.28))' }}>
+            <div className="absolute top-full left-0 mt-1 w-40 rounded-xl z-20 py-1 bg-white border border-stone-200 shadow-lg animate-scale-in origin-top-left">
               {(['draft', 'sent', 'approved', 'rejected'] as QuoteStatus[]).map(s => (
                 <button key={s} onClick={() => { onStatusChange(s); setMenu(false) }}
-                  className="w-full text-left px-3 py-1.5 font-mono text-[11px] uppercase flex items-center gap-2 hover:bg-[color:var(--sheet-2)] transition-colors"
-                  style={{ color: 'var(--ink-2)', letterSpacing: '0.05em' }}>
-                  <span className="w-1.5 h-1.5 rounded-[1px]" style={{ background: STATUS_DOT[s] }} />
+                  className="w-full text-left px-3 py-1.5 text-xs font-semibold flex items-center gap-2 text-stone-600 hover:bg-stone-50 transition-colors">
+                  <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[s]}`} />
                   <span className="flex-1">{STATUS_LABELS[s]}</span>
-                  {s === status && <Check size={12} style={{ color: 'var(--accent)' }} />}
+                  {s === status && <Check size={12} className="text-emerald-600" />}
                 </button>
               ))}
             </div>
@@ -342,18 +325,18 @@ function QuoteRow({ quote, deleting, duplicating, revising, onDelete, onDuplicat
       </div>
 
       {/* Amount */}
-      <div className="fig text-[14px] font-medium text-right w-28 shrink-0" style={{ color: 'var(--ink)' }}>
+      <div className="text-sm font-black text-stone-900 text-right w-28 shrink-0 tabular-nums">
         {grandTotal > 0 ? fmtINR(grandTotal) : '—'}
       </div>
 
       {/* Actions */}
       <div className="flex items-center gap-0.5 shrink-0 w-[136px] justify-end sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-150">
-        <a href={`/quotes/${quote.id}/revisions`} className="btn-ghost btn-sm px-1.5" title="Revision trail"><History size={14} /></a>
-        <a href={`/quotes/${quote.id}/client`} className="btn-ghost btn-sm">PDF</a>
-        <a href={`/quotes/${quote.id}/edit`} className="btn-ghost btn-sm">Edit</a>
-        <button onClick={onRevise} disabled={revising} className="btn-ghost btn-sm px-1.5" title="Create revision"><GitBranch size={14} /></button>
-        <button onClick={onDuplicate} disabled={duplicating} className="btn-ghost btn-sm px-1.5" title="Duplicate"><Copy size={14} /></button>
-        <button onClick={onDelete} disabled={deleting} className="btn-ghost btn-sm px-1.5" title="Delete" style={{ color: 'var(--accent)' }}><Trash2 size={14} /></button>
+        <a href={`/quotes/${quote.id}/revisions`} className="btn-ghost px-1.5 py-1.5" title="Revision trail"><History size={14} /></a>
+        <a href={`/quotes/${quote.id}/client`} className="btn-ghost px-2 py-1.5 text-xs">PDF</a>
+        <a href={`/quotes/${quote.id}/edit`} className="btn-ghost px-2 py-1.5 text-xs">Edit</a>
+        <button onClick={onRevise} disabled={revising} className="btn-ghost px-1.5 py-1.5" title="Create revision"><GitBranch size={14} /></button>
+        <button onClick={onDuplicate} disabled={duplicating} className="btn-ghost px-1.5 py-1.5" title="Duplicate"><Copy size={14} /></button>
+        <button onClick={onDelete} disabled={deleting} className="btn-ghost px-1.5 py-1.5 text-rose-500" title="Delete"><Trash2 size={14} /></button>
       </div>
     </div>
   )
