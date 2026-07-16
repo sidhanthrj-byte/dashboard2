@@ -10,27 +10,25 @@ interface Props {
   mailUrl: string
 }
 
-export default function SharePDF({ quoteNumber, clientName, waUrl, mailUrl }: Props) {
-  const [generating, setGenerating] = useState(false)
-  const [status, setStatus] = useState('')
+async function capturePages(setStatus: (s: string) => void) {
+  const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+    import('html2canvas'),
+    import('jspdf'),
+  ])
 
-  async function generatePDF() {
-    setGenerating(true)
-    setStatus('Rendering…')
+  const pages = Array.from(document.querySelectorAll<HTMLElement>('.quote-pdf-page'))
+  const fallback = document.getElementById('quote-printable')
+  const targets = pages.length > 0 ? pages : (fallback ? [fallback] : [])
+  if (targets.length === 0) return null
 
-    // Dynamically import to keep initial bundle small
-    const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
-      import('html2canvas'),
-      import('jspdf'),
-    ])
+  const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  const pageW = pdf.internal.pageSize.getWidth()   // 210 mm
+  const pageH = pdf.internal.pageSize.getHeight()  // 297 mm
 
-    // Grab the printable content area
-    const el = document.getElementById('quote-printable')
-    if (!el) { setGenerating(false); return }
+  for (let i = 0; i < targets.length; i++) {
+    setStatus(`Rendering page ${i + 1} of ${targets.length}…`)
 
-    setStatus('Generating PDF…')
-
-    const canvas = await html2canvas(el, {
+    const canvas = await html2canvas(targets[i], {
       scale: 2,
       useCORS: true,
       backgroundColor: '#ffffff',
@@ -38,26 +36,46 @@ export default function SharePDF({ quoteNumber, clientName, waUrl, mailUrl }: Pr
     })
 
     const imgData = canvas.toDataURL('image/jpeg', 0.92)
-    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+    const aspectRatio = canvas.height / canvas.width
+    const imgW = pageW
+    const imgH = pageW * aspectRatio
 
-    const pageW = pdf.internal.pageSize.getWidth()
-    const pageH = pdf.internal.pageSize.getHeight()
-    const imgH = (canvas.height * pageW) / canvas.width
+    // First page of this section — either first ever or add a new PDF page
+    if (i > 0) pdf.addPage()
 
-    // Multi-page support
-    let posY = 0
-    while (posY < imgH) {
-      if (posY > 0) pdf.addPage()
-      pdf.addImage(imgData, 'JPEG', 0, -posY, pageW, imgH)
-      posY += pageH
+    // If this section is taller than one A4 page, split it
+    if (imgH <= pageH) {
+      pdf.addImage(imgData, 'JPEG', 0, 0, imgW, imgH)
+    } else {
+      let posY = 0
+      while (posY < imgH) {
+        if (posY > 0) pdf.addPage()
+        pdf.addImage(imgData, 'JPEG', 0, -posY, imgW, imgH)
+        posY += pageH
+      }
     }
+  }
 
-    const filename = `${quoteNumber}-${clientName.replace(/\s+/g, '-')}.pdf`
+  return pdf
+}
+
+export default function SharePDF({ quoteNumber, clientName, waUrl, mailUrl }: Props) {
+  const [generating, setGenerating] = useState(false)
+  const [status, setStatus] = useState('')
+
+  const filename = `${quoteNumber}-${clientName.replace(/\s+/g, '-')}.pdf`
+
+  async function sharePDF() {
+    setGenerating(true)
+    setStatus('Starting…')
+    const pdf = await capturePages(setStatus)
+    if (!pdf) { setGenerating(false); return }
+
+    setStatus('Preparing…')
     const pdfBlob = pdf.output('blob')
 
-    // Try Web Share API first (works on mobile — opens WhatsApp, email, etc.)
     if (navigator.canShare && navigator.canShare({ files: [new File([pdfBlob], filename, { type: 'application/pdf' })] })) {
-      setStatus('Opening share sheet…')
+      setStatus('Opening share…')
       try {
         await navigator.share({
           files: [new File([pdfBlob], filename, { type: 'application/pdf' })],
@@ -67,79 +85,46 @@ export default function SharePDF({ quoteNumber, clientName, waUrl, mailUrl }: Pr
         setStatus('')
         setGenerating(false)
         return
-      } catch {
-        // User dismissed share sheet — fall through to download
-      }
+      } catch { /* dismissed — fall through to download */ }
     }
 
-    // Desktop fallback: download the file
     const url = URL.createObjectURL(pdfBlob)
     const a = document.createElement('a')
-    a.href = url
-    a.download = filename
-    a.click()
+    a.href = url; a.download = filename; a.click()
     URL.revokeObjectURL(url)
+    setStatus('')
+    setGenerating(false)
+  }
+
+  async function downloadPDF() {
+    setGenerating(true)
+    setStatus('Starting…')
+    const pdf = await capturePages(setStatus)
+    if (!pdf) { setGenerating(false); return }
+    setStatus('Saving…')
+    pdf.save(filename)
     setStatus('')
     setGenerating(false)
   }
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
-      {/* WhatsApp text share (fallback / quick share without PDF) */}
       <a href={waUrl} target="_blank" rel="noopener noreferrer"
         className="btn-secondary text-xs gap-1.5 flex items-center">
-        <MessageCircle size={14} /> WhatsApp (text)
+        <MessageCircle size={14} /> WhatsApp
       </a>
-
-      {/* Email text share */}
       <a href={mailUrl}
         className="btn-secondary text-xs gap-1.5 flex items-center">
-        <Mail size={14} /> Email (text)
+        <Mail size={14} /> Email
       </a>
-
-      {/* PDF share/download */}
-      <button
-        onClick={generatePDF}
-        disabled={generating}
-        className="btn-primary text-xs gap-1.5 flex items-center"
-      >
-        {generating ? (
-          <><Loader2 size={14} className="animate-spin" /> {status || 'Generating…'}</>
-        ) : (
-          <><Share2 size={14} /> Share PDF</>
-        )}
+      <button onClick={sharePDF} disabled={generating}
+        className="btn-primary text-xs gap-1.5 flex items-center">
+        {generating
+          ? <><Loader2 size={14} className="animate-spin" /> {status || 'Generating…'}</>
+          : <><Share2 size={14} /> Share PDF</>}
       </button>
-
-      {/* Plain download */}
-      <button
-        onClick={async () => {
-          setGenerating(true)
-          setStatus('Generating…')
-          const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
-            import('html2canvas'),
-            import('jspdf'),
-          ])
-          const el = document.getElementById('quote-printable')
-          if (!el) { setGenerating(false); return }
-          const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false })
-          const imgData = canvas.toDataURL('image/jpeg', 0.92)
-          const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
-          const pageW = pdf.internal.pageSize.getWidth()
-          const pageH = pdf.internal.pageSize.getHeight()
-          const imgH = (canvas.height * pageW) / canvas.width
-          let posY = 0
-          while (posY < imgH) {
-            if (posY > 0) pdf.addPage()
-            pdf.addImage(imgData, 'JPEG', 0, -posY, pageW, imgH)
-            posY += pageH
-          }
-          pdf.save(`${quoteNumber}-${clientName.replace(/\s+/g, '-')}.pdf`)
-          setStatus('')
-          setGenerating(false)
-        }}
-        disabled={generating}
-        className="btn-secondary text-xs gap-1.5 flex items-center"
-      >
+      <button onClick={downloadPDF} disabled={generating}
+        className="btn-secondary text-xs gap-1.5 flex items-center">
         <Download size={14} /> Download PDF
       </button>
     </div>

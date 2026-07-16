@@ -1,14 +1,17 @@
 import { dbGetQuote } from "@/lib/db"
+import { canAccessQuote } from "@/lib/session"
 export const dynamic = 'force-dynamic'
 import { notFound } from 'next/navigation'
 import { calculateQuote, fmtINR, formatDims, round2 } from '@/lib/calculations'
 import type { ItemBreakdown } from '@/lib/types'
 import { Edit, Eye } from 'lucide-react'
 import PrintButton from '@/components/PrintButton'
+import ConvertToProjectButton from '@/components/ConvertToProjectButton'
 
 export default async function TeamPage({ params }: { params: { id: string } }) {
   const quote = await dbGetQuote(params.id)
   if (!quote) notFound()
+  if (!(await canAccessQuote(quote.ownerEmail))) notFound()
 
   const bd = calculateQuote(quote)
   const margin = bd.materialsTotalFinal - bd.materialsTotalDealer
@@ -23,22 +26,22 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
   return (
     <div>
       {/* Nav */}
-      <div className="no-print flex items-center justify-between mb-6">
-        <div className="flex items-center gap-2 text-sm text-slate-400">
+      <div className="no-print flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+        <div className="flex items-center gap-2 text-sm text-slate-400 flex-wrap">
           <a href="/" className="hover:text-slate-600">Quotes</a>
           <span>/</span>
           <span className="text-slate-600">{quote.quoteNumber}</span>
           <span>/</span>
           <span className="font-medium text-slate-800">Team View</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <a href={`/quotes/${quote.id}/client`} className="btn-secondary text-xs gap-1.5">
             <Eye size={14} /> Client View
           </a>
           <a href={`/quotes/${quote.id}/edit`} className="btn-secondary text-xs gap-1.5">
             <Edit size={14} /> Edit
           </a>
-
+          <ConvertToProjectButton quoteId={quote.id} status={quote.status ?? ''} />
           <PrintButton />
         </div>
       </div>
@@ -88,7 +91,7 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
           <div className="bg-blue-50 rounded-xl p-4">
             <p className="text-xs text-blue-600 mb-1">Installation</p>
             <p className="text-xl font-bold text-blue-700">{fmtINR(bd.totalInstallation)}</p>
-            <p className="text-xs text-blue-400">₹{quote.installationRatePerSqft ?? 60}/sqft</p>
+            <p className="text-xs text-blue-400">₹{quote.installationRatePerSqft ?? 120}/sqft</p>
           </div>
           <div className="bg-slate-800 rounded-xl p-4">
             <p className="text-xs text-slate-400 mb-1">Grand Total</p>
@@ -112,7 +115,7 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
 
       {/* Item breakdowns */}
       {bd.itemBreakdowns.map((itemBd, idx) => (
-        <ItemBreakdownCard key={itemBd.item.id} bd={itemBd} index={idx} installRate={quote.installationRatePerSqft ?? 60} />
+        <ItemBreakdownCard key={itemBd.item.id} bd={itemBd} index={idx} installRate={quote.installationRatePerSqft ?? 120} />
       ))}
 
       {/* Footer totals */}
@@ -133,7 +136,7 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
             <tr className="border-b border-slate-100">
               <td className="py-2 text-blue-600 font-medium">
                 Installation
-                <span className="text-xs text-slate-400 font-normal ml-1">(₹{quote.installationRatePerSqft ?? 60}/sqft on actual area)</span>
+                <span className="text-xs text-slate-400 font-normal ml-1">(₹{quote.installationRatePerSqft ?? 120}/sqft on actual area)</span>
               </td>
               <td className="py-2 text-right font-semibold text-blue-700">{fmtINR(bd.totalInstallation)}</td>
             </tr>
@@ -224,12 +227,29 @@ function ItemBreakdownCard({ bd, index, installRate }: { bd: ItemBreakdown; inde
       {bd.ledDetail && (
         <div className="px-6 py-3 bg-slate-50 border-b border-slate-100 text-xs text-slate-600 flex flex-wrap gap-4">
           <span><strong>Cove depth:</strong> {item.lightDepth}"</span>
+          <span><strong>Strip gap:</strong> {item.ledSpacingMM ?? 125}mm</span>
           <span><strong>Strips:</strong> {bd.ledDetail.stripCount}</span>
           <span><strong>Strip length:</strong> {bd.ledDetail.runningLengthM.toFixed(2)}m</span>
           <span><strong>Total LED:</strong> {bd.ledDetail.totalRunningMeters} mtr running</span>
           <span><strong>Load:</strong> {bd.ledDetail.totalWatts}W</span>
         </div>
       )}
+
+      {/* Driver & Controls detail */}
+      {bd.ledDetail && (() => {
+        const driverItems = bd.lineItems.filter(l => l.unit === 'nos')
+        if (!driverItems.length) return null
+        return (
+          <div className="px-6 py-3 bg-amber-50 border-b border-amber-100 text-xs text-amber-800">
+            <span className="font-semibold mr-3">Drivers & Controls:</span>
+            <span className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
+              {driverItems.map((l, i) => (
+                <span key={i}><strong>{l.qty} × {l.description.replace(/ \[.*\]/, '')}</strong></span>
+              ))}
+            </span>
+          </div>
+        )
+      })()}
 
       {/* Line items */}
       <div className="overflow-x-auto">

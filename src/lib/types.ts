@@ -1,4 +1,11 @@
-export type PriceTier = 'dealer' | 'msp' | 'specifiors'
+export type PriceTier = 'dealer' | 'msp' | 'specifiors' | 'manual'
+
+export interface ManualRates {
+  fabricPerSqm: number
+  ledPerMtr: number
+  gripperPerRmt: number
+  otherItemsTier: 'dealer' | 'msp' | 'specifiors'
+}
 export type ShapeType = 'rectangle' | 'circle' | 'triangle' | 'l-shape'
 export type UnitSystem = 'mm' | 'feet' | 'meters'
 export type LightType = 'none' | 'single_color' | 'single_color_dimmable' | 'tunable' | 'tunable_dali' | 'rgb' | 'rgbw'
@@ -31,6 +38,17 @@ export interface CeilingItem {
   quantity: number
   jointType: JointType
   jointPosition: number
+  ledSpacingMM: number  // strip-to-strip gap in mm; default 125 (150 for single colour)
+  ledModuleType: 'standard' | '12dot'  // single colour only; 12dot = 12-dot/m module
+  daliDriver: 'dt8' | 'da4m'  // DALI tunable only: which driver type
+  driverOverrides: Record<string, number>  // qty overrides for driver/control line items (can increase or decrease)
+  preferredDriverWatt?: '50W' | '100W' | '150W' | '200W' | '350W' | '400W' | '600W'  // force a single driver size instead of auto-mix
+  // Lighting configuration: 'looped' treats all pieces (quantity) as ONE continuous
+  // lighting system — drivers sized from combined wattage. 'non_looped' (default)
+  // sizes drivers per ceiling then multiplies by quantity.
+  lightingConfig?: 'looped' | 'non_looped'
+  marginMM?: number  // fabric margin per side in mm (smart: moved to cut axis if it would cause roll-width jump)
+  printingRatePerSqm?: number  // override standard printing rate
   notes: string
 }
 
@@ -51,9 +69,22 @@ export interface Quote {
   transportCost: number
   includeGst: boolean
   displayMode: QuoteDisplayMode
+  manualRates?: ManualRates
   notes: string
   createdAt: string
   updatedAt: string
+  status?: string
+  grandTotal?: number
+  // Multi-company: which company this quotation is issued from
+  company?: string
+  // Ownership: email of the user who created the quote (RBAC)
+  ownerEmail?: string
+  // Revision trail: an original quote has revision 0, parentId undefined and
+  // rootId === id. A revision points at its parent and shares the family rootId.
+  parentId?: string
+  rootId?: string
+  revision?: number
+  revisedBy?: string
 }
 
 export interface LineItem {
@@ -68,6 +99,7 @@ export interface LineItem {
 
 export interface FabricPanel {
   rollWidth: number
+  physicalWidth: number  // actual piece width (≤ rollWidth); cutLength is the other physical dim
   cutLength: number
   panelArea: number
   usedArea: number

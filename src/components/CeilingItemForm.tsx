@@ -2,9 +2,10 @@
 
 import { Trash2, ChevronDown, ChevronUp } from 'lucide-react'
 import { useState, useMemo } from 'react'
-import type { CeilingItem, ShapeType, LightType, GripperType, LEDWidth, UnitSystem, SurfaceType, JointType } from '@/lib/types'
+import type { CeilingItem, ShapeType, LightType, GripperType, LEDWidth, UnitSystem, SurfaceType, JointType, ManualRates } from '@/lib/types'
 import { FABRIC } from '@/lib/pricing'
-import { calculateItem, fmtINR, round2 } from '@/lib/calculations'
+import { calculateItem, fmtINR, round2, manualDriverWarning } from '@/lib/calculations'
+import { SC_WATTS_PER_M_STANDARD, SC_WATTS_PER_M_12DOT, LED_WATTS_PER_M } from '@/lib/pricing'
 
 const FABRIC_OPTIONS = Object.keys(FABRIC)
 
@@ -39,6 +40,14 @@ export function defaultItem(id: string): CeilingItem {
     quantity: 1,
     jointType: 'none',
     jointPosition: 0,
+    ledSpacingMM: 125,
+    ledModuleType: 'standard',
+    daliDriver: 'dt8',
+    driverOverrides: {},
+    preferredDriverWatt: undefined,
+    lightingConfig: 'non_looped',
+    marginMM: 0,
+    printingRatePerSqm: undefined,
     notes: '',
   }
 }
@@ -47,11 +56,13 @@ interface Props {
   item: CeilingItem
   index: number
   priceTier: import('@/lib/types').PriceTier
+  installRatePerSqft?: number
+  manualRates?: ManualRates
   onChange: (item: CeilingItem) => void
   onRemove: () => void
 }
 
-export default function CeilingItemForm({ item, index, priceTier, onChange, onRemove }: Props) {
+export default function CeilingItemForm({ item, index, priceTier, installRatePerSqft, manualRates, onChange, onRemove }: Props) {
   const [open, setOpen] = useState(true)
 
   function set<K extends keyof CeilingItem>(key: K, value: CeilingItem[K]) {
@@ -75,19 +86,22 @@ export default function CeilingItemForm({ item, index, priceTier, onChange, onRe
   const d = item.dimensions as unknown as Record<string, number>
   const hasLights = item.lightType !== 'none'
 
-  // Compute whether both dims exceed 5000mm
+  // Compute dimensions in mm for roll-width eligibility checks
   const dim1MM = item.unit === 'mm' ? (d.dim1 ?? 0) : item.unit === 'feet' ? (d.dim1 ?? 0) * 304.8 : (d.dim1 ?? 0) * 1000
   const dim2MM = item.unit === 'mm' ? (d.dim2 ?? 0) : item.unit === 'feet' ? (d.dim2 ?? 0) * 304.8 : (d.dim2 ?? 0) * 1000
-  const bothOver5k = item.shape === 'rectangle' && dim1MM > 5000 && dim2MM > 5000
+  const d1FitsRoll = dim1MM > 0 && dim1MM <= 5000
+  const d2FitsRoll = dim2MM > 0 && dim2MM <= 5000
+  const neitherFitsRoll = item.shape === 'rectangle' && dim1MM > 0 && dim2MM > 0 && !d1FitsRoll && !d2FitsRoll
+  const onlyOneFitsRoll = item.shape === 'rectangle' && (d1FitsRoll !== d2FitsRoll)
 
   // Live calc preview
   const preview = useMemo(() => {
     try {
-      return calculateItem(item, priceTier)
+      return calculateItem(item, priceTier, installRatePerSqft, manualRates)
     } catch {
       return null
     }
-  }, [item, priceTier])
+  }, [item, priceTier, installRatePerSqft, manualRates])
 
   const stripCount = hasLights ? Math.max(1, Math.floor((item.lightDepth ?? 6) / 6)) : 0
 
@@ -95,19 +109,20 @@ export default function CeilingItemForm({ item, index, priceTier, onChange, onRe
     <div className="card overflow-hidden">
       {/* Item header */}
       <div
-        className="flex items-center justify-between px-5 py-3.5 cursor-pointer bg-slate-50 border-b border-slate-100 hover:bg-slate-100 transition-colors"
+        className="flex items-center justify-between px-5 py-3.5 cursor-pointer transition-colors"
+        style={{ background: 'var(--sheet-2)', borderBottom: '1px solid var(--rule)' }}
         onClick={() => setOpen(o => !o)}
       >
         <div className="flex items-center gap-3">
-          <span className="w-6 h-6 rounded-full bg-slate-800 text-white text-xs font-bold flex items-center justify-center shrink-0">
-            {index + 1}
+          <span className="font-mono text-[11px] font-medium shrink-0" style={{ color: 'var(--accent)' }}>
+            {String(index + 1).padStart(2, '0')}
           </span>
           <div>
-            <span className="font-semibold text-slate-800 text-sm">
-              {item.name || `Ceiling Item ${index + 1}`}
+            <span className="font-display font-semibold text-[14px]" style={{ color: 'var(--ink)' }}>
+              {item.name || `Ceiling ${index + 1}`}
             </span>
             {!open && (d.dim1 > 0 || d.dim2 > 0) && (
-              <span className="text-xs text-slate-500 ml-2">
+              <span className="fig text-[11px] ml-2.5" style={{ color: 'var(--muted)' }}>
                 {d.dim1} × {d.dim2} {item.unit} · {item.fabricType}
               </span>
             )}
@@ -126,7 +141,7 @@ export default function CeilingItemForm({ item, index, priceTier, onChange, onRe
       {open && (
         <div className="px-5 py-5 space-y-5">
           {/* Row 1: Name + Surface + Quantity */}
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <div className="col-span-2">
               <label className="label">Item Name / Location</label>
               <input
@@ -145,7 +160,7 @@ export default function CeilingItemForm({ item, index, priceTier, onChange, onRe
                     onClick={() => onChange({ ...item, surface: s, gripperType: s === 'ceiling' ? 'CW' : 'CC' })}
                     className={`flex-1 py-2 rounded-lg border text-xs font-semibold transition-all ${
                       item.surface === s
-                        ? 'border-slate-700 bg-slate-800 text-white'
+                        ? 'border-[color:var(--ink)] bg-white text-[color:var(--ink)] shadow-[inset_3px_0_0_var(--accent)]'
                         : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
                     }`}
                   >
@@ -157,9 +172,10 @@ export default function CeilingItemForm({ item, index, priceTier, onChange, onRe
             <div>
               <label className="label">Quantity</label>
               <input
+                key={`qty-${item.id}`}
                 type="number" min={1} className="input"
-                value={item.quantity}
-                onChange={e => set('quantity', Math.max(1, parseInt(e.target.value) || 1))}
+                defaultValue={item.quantity}
+                onBlur={e => { const v = parseInt(e.target.value); if (!isNaN(v) && v >= 1) set('quantity', v); else e.target.value = String(item.quantity) }}
               />
             </div>
           </div>
@@ -270,27 +286,49 @@ export default function CeilingItemForm({ item, index, priceTier, onChange, onRe
             )}
           </div>
 
-          {/* Joint detection (only when both dims > 5000mm for rectangles) */}
-          {bothOver5k && (
+          {/* Joint option — always available for rectangles */}
+          {item.shape === 'rectangle' && dim1MM > 0 && dim2MM > 0 && (
             <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
-              <label className="label">Joint Type (both dims &gt; 5000mm)</label>
+              <label className="label mb-1">Joint Option</label>
+              {neitherFitsRoll && (
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1 mb-2">
+                  Both dimensions exceed 5m — a joint is required. Select center or off-center below.
+                </p>
+              )}
+              {onlyOneFitsRoll && (
+                <p className="text-xs text-slate-500 mb-2">
+                  {dim1MM > 5000 || dim2MM > 5000
+                    ? `One dimension exceeds 5m max roll width — without joint, the fabric is oriented so the fitting dimension is the roll axis. With joint, the larger dimension is split so each piece fits a smaller roll (lower wastage).`
+                    : 'Both dimensions fit within available rolls. A joint reduces billed area when split orientation gives lower wastage.'}
+                </p>
+              )}
+              {!neitherFitsRoll && !onlyOneFitsRoll && (
+                <p className="text-xs text-slate-500 mb-2">
+                  Both dimensions fit available rolls. Without joint, the lower-waste orientation is used automatically. With joint, the fabric is split for even lower wastage or client preference.
+                </p>
+              )}
               <div className="flex gap-2 flex-wrap">
                 {(['none', 'center', 'off-center'] as JointType[]).map(j => (
                   <button key={j} type="button"
                     onClick={() => set('jointType', j)}
                     className={`px-3 py-2 rounded-lg border text-xs font-semibold transition-all ${
                       item.jointType === j
-                        ? 'border-slate-700 bg-slate-800 text-white'
+                        ? 'border-[color:var(--ink)] bg-white text-[color:var(--ink)] shadow-[inset_3px_0_0_var(--accent)]'
                         : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
                     }`}
                   >
-                    {j === 'none' ? 'No Joint (auto)' : j === 'center' ? 'Center Joint' : 'Off-Center Joint'}
+                    {j === 'none' ? 'No Joint' : j === 'center' ? 'Center Joint' : 'Off-Center Joint'}
                   </button>
                 ))}
               </div>
+              {item.jointType !== 'none' && (
+                <p className="text-xs text-indigo-600 mt-2">
+                  Joint: the larger dimension is split. Each half becomes a roll-axis piece; the smaller dimension is the cut length. See Smart Calc Preview for exact panels and wastage.
+                </p>
+              )}
               {item.jointType === 'off-center' && (
                 <div className="mt-3 max-w-xs">
-                  <label className="label">Joint Position (mm from one edge)</label>
+                  <label className="label">Joint Position (mm from one end of the larger dimension)</label>
                   <input type="number" min="0" className="input"
                     value={item.jointPosition || ''}
                     onChange={e => set('jointPosition', parseFloat(e.target.value) || 0)} />
@@ -314,6 +352,21 @@ export default function CeilingItemForm({ item, index, priceTier, onChange, onRe
                   onChange={e => set('withPrinting', e.target.checked)} />
                 Add Printing Charges
               </label>
+              {item.withPrinting && (
+                <div className="ml-6 max-w-[160px]">
+                  <label className="label text-xs">Printing Rate (₹/sqm)</label>
+                  <input
+                    type="number" min="0" step="50" className="input text-sm"
+                    placeholder="Standard rate"
+                    value={item.printingRatePerSqm ?? ''}
+                    onChange={e => {
+                      const v = parseFloat(e.target.value)
+                      set('printingRatePerSqm', isNaN(v) ? undefined : v)
+                    }}
+                  />
+                  <p className="text-xs text-slate-400 mt-0.5">Leave blank for standard</p>
+                </div>
+              )}
               <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
                 <input type="checkbox" className="rounded border-slate-300"
                   checked={item.withFleece}
@@ -322,6 +375,26 @@ export default function CeilingItemForm({ item, index, priceTier, onChange, onRe
               </label>
             </div>
           </div>
+
+          {/* Fabric margin */}
+          {item.shape !== 'circle' && (
+            <div className="max-w-[220px]">
+              <label className="label">Fabric Margin (mm per side)</label>
+              <input
+                key={`margin-${item.id}`}
+                type="number" min="0" max="500" step="10" className="input"
+                defaultValue={item.marginMM ?? 0}
+                onBlur={e => {
+                  const v = parseInt(e.target.value)
+                  set('marginMM', isNaN(v) || v < 0 ? 0 : v)
+                  if (isNaN(v)) e.target.value = String(item.marginMM ?? 0)
+                }}
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                Smart: margin moves to cut side if it would jump to a wider roll. Affects fabric cost only.
+              </p>
+            </div>
+          )}
 
           {/* Gripper */}
           <div className="max-w-xs">
@@ -341,10 +414,14 @@ export default function CeilingItemForm({ item, index, priceTier, onChange, onRe
               {LIGHT_OPTIONS.map(opt => (
                 <button
                   key={opt.value} type="button"
-                  onClick={() => set('lightType', opt.value)}
+                  onClick={() => {
+                    const isSC = opt.value === 'single_color' || opt.value === 'single_color_dimmable'
+                    const defaultSpacing = isSC ? 150 : 125
+                    onChange({ ...item, lightType: opt.value, ledSpacingMM: defaultSpacing })
+                  }}
                   className={`p-3 rounded-lg border text-left transition-all ${
                     item.lightType === opt.value
-                      ? 'border-slate-700 bg-slate-800 text-white'
+                      ? 'border-[color:var(--ink)] bg-white text-[color:var(--ink)] shadow-[inset_3px_0_0_var(--accent)]'
                       : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
                   }`}
                 >
@@ -367,7 +444,7 @@ export default function CeilingItemForm({ item, index, priceTier, onChange, onRe
                       onClick={() => set('lightDepth', d)}
                       className={`px-3 py-1.5 rounded-lg border text-sm font-semibold transition-all ${
                         item.lightDepth === d
-                          ? 'border-slate-700 bg-slate-800 text-white'
+                          ? 'border-[color:var(--ink)] bg-white text-[color:var(--ink)] shadow-[inset_3px_0_0_var(--accent)]'
                           : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
                       }`}
                     >
@@ -388,7 +465,7 @@ export default function CeilingItemForm({ item, index, priceTier, onChange, onRe
                       onClick={() => set('ledWidth', w)}
                       className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all ${
                         item.ledWidth === w
-                          ? 'border-slate-700 bg-slate-800 text-white'
+                          ? 'border-[color:var(--ink)] bg-white text-[color:var(--ink)] shadow-[inset_3px_0_0_var(--accent)]'
                           : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
                       }`}
                     >
@@ -396,6 +473,107 @@ export default function CeilingItemForm({ item, index, priceTier, onChange, onRe
                     </button>
                   ))}
                 </div>
+              </div>
+              {item.lightType === 'tunable_dali' && (
+                <div>
+                  <label className="label">DALI Driver Type</label>
+                  <div className="flex gap-2">
+                    {([['dt8', 'DT8 150W'], ['da4m', 'DA4m']] as const).map(([val, label]) => (
+                      <button key={val} type="button"
+                        onClick={() => set('daliDriver', val)}
+                        className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all ${
+                          (item.daliDriver ?? 'dt8') === val
+                            ? 'border-[color:var(--ink)] bg-white text-[color:var(--ink)] shadow-[inset_3px_0_0_var(--accent)]'
+                            : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                        }`}
+                      >{label}</button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">Max 10 modules per driver · DA4m at 1 per 3 DT8</p>
+                </div>
+              )}
+              {(item.lightType === 'single_color' || item.lightType === 'tunable') && (
+                <div>
+                  <label className="label">Driver Size</label>
+                  <div className="flex gap-2 flex-wrap">
+                    {([
+                      [undefined, 'Auto (best mix)'],
+                      ['600W', '600W'],
+                      ['400W', '400W'],
+                      ['350W', '350W'],
+                      ['200W', '200W'],
+                      ['150W', '150W'],
+                      ['100W', '100W'],
+                      ['50W',  '50W'],
+                    ] as const).map(([val, label]) => (
+                      <button key={val ?? 'auto'} type="button"
+                        onClick={() => onChange({ ...item, preferredDriverWatt: val, driverOverrides: {} })}
+                        className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-all ${
+                          (item.preferredDriverWatt ?? undefined) === val
+                            ? 'border-[color:var(--ink)] bg-white text-[color:var(--ink)] shadow-[inset_3px_0_0_var(--accent)]'
+                            : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                        }`}
+                      >{label}</button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">Auto prefers 200W drivers (600W runs hot and needs a fan — avoided unless necessary). Override to force a single size.</p>
+                </div>
+              )}
+              {/* Looped / Non-Looped lighting configuration */}
+              <div>
+                <label className="label">Lighting Configuration</label>
+                <div className="flex gap-2">
+                  {([['non_looped', 'Non-Looped'], ['looped', 'Looped']] as const).map(([val, label]) => (
+                    <button key={val} type="button"
+                      onClick={() => onChange({ ...item, lightingConfig: val, driverOverrides: {} })}
+                      className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
+                        (item.lightingConfig ?? 'non_looped') === val
+                          ? 'border-[color:var(--ink)] bg-white text-[color:var(--ink)] shadow-[inset_3px_0_0_var(--accent)]'
+                          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                      }`}
+                    >{label}</button>
+                  ))}
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  {(item.lightingConfig ?? 'non_looped') === 'looped'
+                    ? 'Looped: all pieces run as one continuous system — drivers sized once from combined wattage (usually fewer drivers).'
+                    : 'Non-Looped: each ceiling is an independent circuit — drivers calculated per piece × quantity.'}
+                </p>
+              </div>
+              {/* 12-dot module option for single colour */}
+              {(item.lightType === 'single_color' || item.lightType === 'single_color_dimmable') && (
+                <div>
+                  <label className="label">Module Type</label>
+                  <div className="flex gap-2">
+                    {([['standard', 'Standard'], ['12dot', '12 Dot']] as const).map(([val, label]) => (
+                      <button key={val} type="button"
+                        onClick={() => set('ledModuleType', val)}
+                        className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
+                          (item.ledModuleType ?? 'standard') === val
+                            ? 'border-[color:var(--ink)] bg-white text-[color:var(--ink)] shadow-[inset_3px_0_0_var(--accent)]'
+                            : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                        }`}
+                      >{label}</button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">12 Dot = 12-dot/m module (same 13W/m)</p>
+                </div>
+              )}
+              <div className="max-w-[160px]">
+                <label className="label">Strip Gap (mm)</label>
+                <input
+                  key={`spacing-${item.id}`}
+                  type="number" min="50" max="500" step="5" className="input"
+                  defaultValue={item.ledSpacingMM ?? 125}
+                  onBlur={e => {
+                    const v = parseFloat(e.target.value)
+                    if (!isNaN(v) && v > 0) set('ledSpacingMM', v)
+                    else e.target.value = String(item.ledSpacingMM ?? 125)
+                  }}
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  Default: {(item.lightType === 'single_color' || item.lightType === 'single_color_dimmable') ? '150' : '125'}mm
+                </p>
               </div>
             </div>
           )}
@@ -405,13 +583,116 @@ export default function CeilingItemForm({ item, index, priceTier, onChange, onRe
             <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-lg text-xs text-indigo-800 space-y-1">
               <p className="font-semibold text-indigo-900 mb-2">Smart Calc Preview</p>
               {preview.fabricDetail.panels.map((panel, i) => (
-                <p key={i}>• Roll: {panel.orientation} | Waste: {panel.wastageArea.toFixed(2)} sqm ({panel.wastagePercent.toFixed(1)}%)</p>
+                <p key={i}>• {preview.fabricDetail.panels.length > 1 ? `Panel ${i+1}: ` : ''}Roll: {panel.orientation} | Waste: {panel.wastageArea.toFixed(2)} sqm ({panel.wastagePercent.toFixed(1)}%)</p>
               ))}
-              {preview.ledDetail && (
-                <p>• LED: {preview.ledDetail.stripCount} strip{preview.ledDetail.stripCount > 1 ? 's' : ''} × {preview.ledDetail.runningLengthM.toFixed(2)}m = {preview.ledDetail.totalRunningMeters} mtr running | {preview.ledDetail.totalWatts}W total</p>
+              {preview.fabricDetail.panels.length > 1 ? (
+                <p>• Total billed fabric: {round2(preview.fabricDetail.totalBilledArea * item.quantity).toFixed(2)} sqm{item.quantity > 1 ? ` (${preview.fabricDetail.totalBilledArea.toFixed(2)} × ${item.quantity})` : ''}</p>
+              ) : (
+                <p>• Fabric billed: {round2(preview.fabricDetail.totalBilledArea * item.quantity).toFixed(2)} sqm{item.quantity > 1 ? ` (${preview.fabricDetail.totalBilledArea.toFixed(2)} × ${item.quantity})` : ''}</p>
               )}
-              <p>• Gripper: {round2(preview.perimeterM).toFixed(2)} rmt {item.gripperType}</p>
-              <p className="font-semibold pt-1">Item subtotal: {fmtINR(preview.subtotalFinal)} + {fmtINR(preview.installationCost)} install</p>
+              {preview.ledDetail && (
+                <p>• LED: {preview.ledDetail.stripCount * item.quantity} strip{preview.ledDetail.stripCount * item.quantity > 1 ? 's' : ''}{item.quantity > 1 ? ` (${preview.ledDetail.stripCount}×${item.quantity})` : ''} × {preview.ledDetail.runningLengthM.toFixed(2)}m = {round2(preview.ledDetail.totalRunningMeters * item.quantity)} mtr running | {round2(preview.ledDetail.totalWatts * item.quantity)}W total</p>
+              )}
+              {(() => {
+                const panels = preview.fabricDetail.panels
+                const hasJoint = preview.fabricDetail.hasJoint && panels.length > 1
+                // Gripper comes in 1m lengths — always rounded UP to whole metres per ceiling
+                const gripperQty = hasJoint
+                  ? Math.ceil(panels.reduce((s, p) => s + 2 * (p.physicalWidth + p.cutLength), 0))
+                  : Math.ceil(preview.perimeterM)
+                const jointNote = hasJoint
+                  ? ` (${panels.map((p, i) => `P${i+1}: 2×(${p.physicalWidth.toFixed(2)}+${p.cutLength.toFixed(2)})m`).join(', ')})`
+                  : ''
+                return (
+                  <p>• Gripper: {gripperQty * item.quantity} rmt {item.gripperType}{item.quantity > 1 ? ` (${gripperQty} × ${item.quantity})` : ''} — rounded up to whole metres{jointNote}</p>
+                )
+              })()}
+              {/* Drivers & Controls with manual override */}
+              {(() => {
+                const driverItems = preview.lineItems.filter(l => l.unit === 'nos')
+                if (!driverItems.length) return null
+                // We need the "auto-calculated" qty before overrides — re-derive from overrides map
+                // The preview already has overrides applied, so we read calculated qty from a fresh preview without overrides
+                const autoPreview = (() => {
+                  try {
+                    return calculateItem({ ...item, driverOverrides: {} }, priceTier, installRatePerSqft, manualRates)
+                  } catch { return null }
+                })()
+                const autoItems = autoPreview?.lineItems.filter(l => l.unit === 'nos') ?? []
+                return (
+                  <div className="mt-2 pt-2 border-t border-indigo-200">
+                    <p className="font-semibold text-indigo-900 mb-1.5">Drivers &amp; Controls <span className="font-normal text-indigo-600">(edit qty freely)</span></p>
+                    <div className="space-y-1.5">
+                      {autoItems.map((auto, i) => {
+                        const overrideVal = (item.driverOverrides ?? {})[auto.description]
+                        const displayQty = overrideVal !== undefined ? overrideVal : auto.qty
+                        const isOverridden = overrideVal !== undefined && overrideVal !== auto.qty
+                        return (
+                          <div key={i} className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              min={0}
+                              key={`${auto.description}-${auto.qty}-${overrideVal ?? 'x'}`}
+                              defaultValue={displayQty}
+                              onBlur={e => {
+                                const v = parseInt(e.target.value)
+                                if (isNaN(v) || v < 0) return
+                                const newOv = { ...(item.driverOverrides ?? {}) }
+                                if (v === auto.qty) {
+                                  delete newOv[auto.description]
+                                } else {
+                                  newOv[auto.description] = v
+                                }
+                                onChange({ ...item, driverOverrides: newOv })
+                              }}
+                              className="w-14 px-1.5 py-0.5 rounded border border-indigo-300 bg-white text-indigo-900 text-center text-xs"
+                            />
+                            <span className="text-indigo-700 text-xs">×</span>
+                            <span className={`text-xs ${isOverridden ? 'text-indigo-600 font-medium' : ''}`}>
+                              {auto.description.replace(/ \[.*?\]/, '')}
+                            </span>
+                            {isOverridden && (
+                              <span className="text-indigo-400 text-xs">(auto: {auto.qty})</span>
+                            )}
+                            {isOverridden && (
+                              <button
+                                type="button"
+                                className="text-indigo-400 underline text-xs ml-1"
+                                onClick={() => {
+                                  const newOv = { ...(item.driverOverrides ?? {}) }
+                                  delete newOv[auto.description]
+                                  onChange({ ...item, driverOverrides: newOv })
+                                }}
+                              >reset</button>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })()}
+              {/* Advisory: manual driver capacity vs auto best mix (>30% = warn, never blocks) */}
+              {(() => {
+                if (!item.preferredDriverWatt || !preview.ledDetail) return null
+                const isSC = item.lightType === 'single_color' || item.lightType === 'single_color_dimmable'
+                const wattsPerM = isSC
+                  ? (item.ledModuleType === '12dot' ? SC_WATTS_PER_M_12DOT : SC_WATTS_PER_M_STANDARD)
+                  : LED_WATTS_PER_M
+                const isLooped = item.lightingConfig === 'looped'
+                const totalModules = isLooped
+                  ? preview.ledDetail.totalRunningMeters * Math.max(1, item.quantity)
+                  : preview.ledDetail.totalRunningMeters
+                const warning = manualDriverWarning(totalModules, wattsPerM, item.preferredDriverWatt)
+                if (!warning) return null
+                return (
+                  <div className="mt-2 p-3 bg-amber-50 border border-amber-300 rounded-lg text-amber-800 text-xs flex gap-2">
+                    <span className="shrink-0">⚠</span>
+                    <span>{warning}</span>
+                  </div>
+                )
+              })()}
+              <p className="font-semibold pt-1">Item total{item.quantity > 1 ? ` (×${item.quantity})` : ''}: {fmtINR(preview.itemTotal)}</p>
             </div>
           )}
 

@@ -1,10 +1,11 @@
 import type {
   CeilingItem, PriceTier, FabricDetail, FabricPanel, LEDDetail,
-  LineItem, ItemBreakdown, QuoteBreakdown, Quote,
+  LineItem, ItemBreakdown, QuoteBreakdown, Quote, ManualRates,
   TwoDims, CircleDims, TriangleDims,
 } from './types'
 import {
   FABRIC, PRINTING, GRIPPER, LED, LED_WATTS_PER_M,
+  SC_WATTS_PER_M_STANDARD, SC_WATTS_PER_M_12DOT,
   STANDARD_DRIVERS, DALI2_DRIVE_200W, DT8_150W,
   CONTROLS, FLEECE, ROLL_WIDTHS, p,
   INSTALLATION_RATE_PER_SQFT, SQFT_PER_SQM,
@@ -32,88 +33,146 @@ function readTwoDims(dims: unknown): { dim1: number; dim2: number } {
   return { dim1: 0, dim2: 0 }
 }
 
-function bestRollForWidth(widthM: number): number {
+// Returns null when no available roll can fit this width (> 5m max)
+// 0.1mm tolerance handles floating-point imprecision (e.g. 1.8 + 0.2 = 2.0000000000000004)
+function bestRollForWidth(widthM: number): number | null {
   const widthMM = widthM * 1000
-  const rolls = ROLL_WIDTHS // metres: [2,3,4,5]
-  const rollMM = rolls.map(r => r * 1000)
-  const fit = rollMM.find(r => r >= widthMM)
-  return fit ? fit / 1000 : 5 // default to 5m if too wide
+  const fit = ROLL_WIDTHS.find(r => r * 1000 >= widthMM - 0.1)
+  return fit ?? null
 }
 
 function makePanel(
-  widthM: number,
-  lengthM: number,
+  rollAxisM: number,  // the dimension used as roll width (must fit in a roll)
+  cutLengthM: number,
   isJoint: boolean,
 ): FabricPanel {
-  const roll = bestRollForWidth(widthM)
-  const panelArea = round2(roll * lengthM)
-  const usedArea = round2(widthM * lengthM)
+  const roll = bestRollForWidth(rollAxisM) ?? 5 // 5m fallback for edge cases
+  const panelArea = round2(roll * cutLengthM)
+  const usedArea = round2(rollAxisM * cutLengthM)
   const wastageArea = round2(panelArea - usedArea)
   const wastagePercent = panelArea > 0 ? round2((wastageArea / panelArea) * 100) : 0
   return {
     rollWidth: roll,
-    cutLength: round2(lengthM),
+    physicalWidth: round2(rollAxisM),
+    cutLength: round2(cutLengthM),
     panelArea,
     usedArea,
     wastageArea,
     wastagePercent,
-    orientation: `${roll}m roll × ${lengthM.toFixed(2)}m cut`,
+    orientation: `${roll}m roll × ${cutLengthM.toFixed(2)}m cut`,
     isJoint,
   }
 }
 
+// Determine the no-joint orientation: which dim is the roll axis, which is the cut length
+function orientNoJoint(d1M: number, d2M: number): { rollWidthM: number; cutLengthM: number; needsJoint: boolean } {
+  const roll1 = bestRollForWidth(d1M)
+  const roll2 = bestRollForWidth(d2M)
+
+  if (roll1 !== null && roll2 !== null) {
+    // Both fit — pick by min wastage
+    const waste1 = (roll1 - d1M) * d2M
+    const waste2 = (roll2 - d2M) * d1M
+    return waste1 <= waste2
+      ? { rollWidthM: d1M, cutLengthM: d2M, needsJoint: false }
+      : { rollWidthM: d2M, cutLengthM: d1M, needsJoint: false }
+  }
+  if (roll1 !== null) return { rollWidthM: d1M, cutLengthM: d2M, needsJoint: false }
+  if (roll2 !== null) return { rollWidthM: d2M, cutLengthM: d1M, needsJoint: false }
+  // Neither fits — both > 5m, joint is required
+  return { rollWidthM: Math.min(d1M, d2M), cutLengthM: Math.max(d1M, d2M), needsJoint: true }
+}
+
+// For center joint: find the best split — try splitting each dimension, pick less wastage
+// Splitting a dim means each half becomes the roll axis, the other dim becomes cut length
+function bestCenterJointPanels(d1M: number, d2M: number): { panels: FabricPanel[]; desc: string } {
+  const larger = Math.max(d1M, d2M)
+  const smaller = Math.min(d1M, d2M)
+
+  // Option A: split the larger dimension — each half is roll axis, smaller is cut length
+  const halfLarge = larger / 2
+  const rollA = bestRollForWidth(halfLarge) ?? 5
+  const wasteA = (rollA - halfLarge) * smaller * 2
+
+  // Option B: split the smaller dimension — each half is roll axis, larger is cut length
+  const halfSmall = smaller / 2
+  const rollB = bestRollForWidth(halfSmall) ?? 5
+  const wasteB = (rollB - halfSmall) * larger * 2
+
+  if (wasteA <= wasteB) {
+    return {
+      panels: [makePanel(halfLarge, smaller, true), makePanel(halfLarge, smaller, true)],
+      desc: `Center joint at ${(halfLarge * 1000).toFixed(0)}mm from each end (${(larger * 1000).toFixed(0)}mm dimension split)`,
+    }
+  }
+  return {
+    panels: [makePanel(halfSmall, larger, true), makePanel(halfSmall, larger, true)],
+    desc: `Center joint at ${(halfSmall * 1000).toFixed(0)}mm from each end (${(smaller * 1000).toFixed(0)}mm dimension split)`,
+  }
+}
+
+// Smart margin: avoid roll-width jump by moving margin to cut axis when necessary.
+// marginM = per-side margin in metres. Only affects fabric billing, not LED/gripper/installation.
+function applySmartMargin(d1M: number, d2M: number, marginM: number): { d1M: number; d2M: number } {
+  if (marginM <= 0) return { d1M, d2M }
+
+  const roll1 = bestRollForWidth(d1M)
+  const roll2 = bestRollForWidth(d2M)
+
+  // Determine which dim is the roll axis (lower wastage)
+  let rollIsD1: boolean
+  if (roll1 !== null && roll2 !== null) {
+    rollIsD1 = (roll1 - d1M) * d2M <= (roll2 - d2M) * d1M
+  } else {
+    rollIsD1 = roll1 !== null
+  }
+
+  const rollDim = rollIsD1 ? d1M : d2M
+  const cutDim  = rollIsD1 ? d2M : d1M
+  const currentRoll = bestRollForWidth(rollDim)
+  const totalMargin = 2 * marginM
+
+  let newRoll = rollDim
+  let newCut  = cutDim
+
+  if (currentRoll === null || totalMargin <= currentRoll - rollDim) {
+    // No roll jump — apply margin to both dimensions
+    newRoll = rollDim + totalMargin
+    newCut  = cutDim  + totalMargin
+  } else {
+    // Would jump — move all margin to cut axis, keep roll axis unchanged
+    newCut = cutDim + totalMargin
+  }
+
+  return rollIsD1 ? { d1M: newRoll, d2M: newCut } : { d1M: newCut, d2M: newRoll }
+}
+
 function computeFabricDetail(
-  widthM: number,
-  lengthM: number,
+  d1M: number,  // raw input dimension 1 (not pre-oriented)
+  d2M: number,  // raw input dimension 2 (not pre-oriented)
   item: CeilingItem,
 ): FabricDetail {
-  const widthMM = widthM * 1000
-  const lengthMM = lengthM * 1000
-  const hasJoint = widthMM > 5000 || lengthMM > 5000
-    ? item.jointType !== 'none'
-    : false
-  const bothOver5k = widthMM > 5000 && lengthMM > 5000
+  const larger = Math.max(d1M, d2M)
+  const smaller = Math.min(d1M, d2M)
 
   let panels: FabricPanel[] = []
   let jointPositionDesc = ''
 
-  if (!bothOver5k || item.jointType === 'none') {
-    // Single panel — optimise orientation
-    const dim1MM = widthM * 1000
-    const dim2MM = lengthM * 1000
-    // Try widthM as roll axis
-    const roll1 = bestRollForWidth(widthM)
-    const waste1 = (roll1 - widthM) * lengthM
-    // Try lengthM as roll axis
-    const roll2 = bestRollForWidth(lengthM)
-    const waste2 = (roll2 - lengthM) * widthM
-
-    let chosenWidth: number, chosenLength: number
-    if (waste1 <= waste2) {
-      chosenWidth = widthM; chosenLength = lengthM
-    } else {
-      chosenWidth = lengthM; chosenLength = widthM
-    }
-    panels = [makePanel(chosenWidth, chosenLength, false)]
+  if (item.jointType === 'none') {
+    const { rollWidthM, cutLengthM } = orientNoJoint(d1M, d2M)
+    panels = [makePanel(rollWidthM, cutLengthM, false)]
     jointPositionDesc = 'No joint'
   } else if (item.jointType === 'center') {
-    // Split lengthM (the longer dim) in half
-    const half = lengthM / 2
-    panels = [
-      makePanel(widthM, half, true),
-      makePanel(widthM, half, true),
-    ]
-    jointPositionDesc = `Center joint at ${(half * 1000).toFixed(0)}mm from each end`
+    const { panels: p, desc } = bestCenterJointPanels(d1M, d2M)
+    panels = p
+    jointPositionDesc = desc
   } else {
-    // off-center
-    const pos = (item.jointPosition ?? 0) / 1000 // mm → m
-    const p1len = Math.max(0.01, pos)
-    const p2len = Math.max(0.01, lengthM - p1len)
-    panels = [
-      makePanel(widthM, p1len, true),
-      makePanel(widthM, p2len, true),
-    ]
-    jointPositionDesc = `Joint at ${item.jointPosition}mm from one end`
+    // off-center: split the larger dimension at jointPosition mm from one end
+    const posM = (item.jointPosition ?? 0) / 1000
+    const p1 = Math.max(0.01, posM)
+    const p2 = Math.max(0.01, larger - p1)
+    panels = [makePanel(p1, smaller, true), makePanel(p2, smaller, true)]
+    jointPositionDesc = `Joint at ${item.jointPosition}mm from one end (${(larger * 1000).toFixed(0)}mm dimension split)`
   }
 
   const totalBilledArea = round2(panels.reduce((s, p) => s + p.panelArea, 0))
@@ -147,16 +206,12 @@ function getGeometry(item: CeilingItem) {
       const { dim1, dim2 } = readTwoDims(item.dimensions)
       const d1M = toM(dim1, u), d2M = toM(dim2, u)
       const d1MM = toMM(dim1, u), d2MM = toMM(dim2, u)
-      // Smart orientation: try both as roll width, pick less wastage
-      const roll1 = bestRollForWidth(d1M)
-      const roll2 = bestRollForWidth(d2M)
-      const waste1 = (roll1 - d1M) * d2M
-      const waste2 = (roll2 - d2M) * d1M
-      const widthM = waste1 <= waste2 ? d1M : d2M
-      const lengthM = waste1 <= waste2 ? d2M : d1M
+      // widthM = the dimension that must be the roll axis (fits in a ≤5m roll)
+      // If only one fits it's forced; if both fit pick min wastage; if neither, use smaller
+      const { rollWidthM, cutLengthM } = orientNoJoint(d1M, d2M)
       return {
         dim1M: d1M, dim2M: d2M,
-        widthM, lengthM,
+        widthM: rollWidthM, lengthM: cutLengthM,
         areaM2: d1M * d2M,
         perimeterM: 2 * (d1M + d2M),
         dim1MM: d1MM, dim2MM: d2MM,
@@ -215,224 +270,361 @@ function ledKey(item: CeilingItem): string {
     return item.ledWidth === 'wider' ? 'Wider Tunable' : 'Tunable'
   if (item.lightType === 'rgb') return 'RGB'
   if (item.lightType === 'rgbw') return 'RGBW/NW/WW'
-  return item.ledWidth === 'wider' ? 'Wider Single Colour' : 'Single Colour'
+  if (item.ledWidth === 'wider') return 'Wider Single Colour'
+  return item.ledModuleType === '12dot' ? 'Single Colour 12Dot' : 'Single Colour'
 }
 
-function buildDriverLines(
-  totalWatts: number,
-  lightType: string,
-  tier: PriceTier,
-  runningMeters: number,
-): LineItem[] {
+// Module-count limits per driver type (per Pongs LED Module & Driver Guide)
+const DALI_TW_MOD_PER_DRV  = 10  // DT8 150W / DA4m — tunable white DALI (max 10 modules)
+const DALI_SC_MOD_PER_DRV  = 13  // DT2 200W  — single colour DALI dimmable
+
+// Returns module capacity for each standard driver at 85% load given watts/module
+function makeDriverSpecs(wattsPerM: number): { key: string; modules: number }[] {
+  return Object.entries(STANDARD_DRIVERS)
+    .map(([key, spec]) => ({ key, modules: Math.floor(spec.watts * 0.85 / wattsPerM) }))
+    .filter(s => s.modules > 0)
+    .sort((a, b) => b.modules - a.modules)
+}
+
+// Auto Best Mix packing.
+// Real-world preference: 200W drivers run cool and silent; 600W drivers need active
+// cooling (fan noise) and are avoided on site. So the auto mix fills with 200W units
+// and covers the remainder with the smallest driver that fits — 600W is only used
+// if no other driver exists. Manual selection is never affected by this rule.
+function packDrivers(totalModules: number, specs: { key: string; modules: number }[]): Record<string, number> {
+  const counts: Record<string, number> = {}
+  if (totalModules <= 0 || specs.length === 0) return counts
+
+  // Exclude 600W from the auto pool unless it's the only driver available
+  const pool = specs.filter(s => s.key !== '600W')
+  const usable = pool.length > 0 ? pool : specs
+
+  const preferred = usable.find(s => s.key === '200W')
+    ?? [...usable].sort((a, b) => b.modules - a.modules)[0]
+
+  let rem = totalModules
+  // Fill bulk with the preferred (200W) driver
+  while (rem > preferred.modules) {
+    counts[preferred.key] = (counts[preferred.key] || 0) + 1
+    rem -= preferred.modules
+  }
+  // Remainder: smallest driver that covers it (efficient wattage utilisation)
+  const fit = usable
+    .filter(s => s.modules >= rem)
+    .sort((a, b) => a.modules - b.modules)[0] ?? preferred
+  counts[fit.key] = (counts[fit.key] || 0) + 1
+  return counts
+}
+
+// Total watt capacity of a driver-count map (standard drivers only)
+function mixCapacityWatts(counts: Record<string, number>): number {
+  return Object.entries(counts).reduce((s, [k, q]) => s + (STANDARD_DRIVERS[k]?.watts ?? 0) * q, 0)
+}
+
+// Advisory check for manual driver selection: returns a warning string when the
+// manually selected capacity exceeds the Auto Best Mix capacity by more than 30%.
+// Non-blocking — callers should display it but never prevent saving.
+export function manualDriverWarning(
+  totalModules: number,
+  wattsPerM: number,
+  preferredDriverWatt?: string,
+): string | null {
+  if (!preferredDriverWatt || totalModules <= 0) return null
+  const specs = makeDriverSpecs(wattsPerM)
+  const manualSpec = specs.find(s => s.key === preferredDriverWatt)
+  if (!manualSpec) return null
+  const manualCount = Math.ceil(totalModules / manualSpec.modules)
+  const manualCapacity = manualCount * (STANDARD_DRIVERS[preferredDriverWatt]?.watts ?? 0)
+  const autoCapacity = mixCapacityWatts(packDrivers(totalModules, specs))
+  if (autoCapacity > 0 && manualCapacity > autoCapacity * 1.3) {
+    return `Manual driver selection (${manualCount} × ${preferredDriverWatt} = ${manualCapacity}W) exceeds the recommended automatic configuration (${autoCapacity}W) by more than 30%. This may increase project cost unnecessarily. Recommended: Auto Best Mix.`
+  }
+  return null
+}
+
+function addCtrl(key: string, qty: number, tier: PriceTier): LineItem {
+  const pr = CONTROLS[key]
+  return { description: key, qty, unit: 'nos', dealerRate: pr.dealer, tierRate: p(pr, tier), dealerAmount: qty * pr.dealer, tierAmount: qty * p(pr, tier) }
+}
+
+function buildDriverLines(totalModules: number, lightType: string, tier: PriceTier, daliDriver?: 'dt8' | 'da4m', preferredDriverWatt?: string, ledModuleType?: string): LineItem[] {
   const items: LineItem[] = []
-  const required = totalWatts * 1.2
 
   if (lightType === 'tunable_dali') {
-    // DALI at site: DT8 150W + DA4m
-    const count = Math.ceil(required / DT8_150W.watts)
-    items.push({
-      description: 'DT8 150W Driver (DALI at site)',
-      qty: count, unit: 'nos',
-      dealerRate: DT8_150W.price.dealer,
-      tierRate: p(DT8_150W.price, tier),
-      dealerAmount: count * DT8_150W.price.dealer,
-      tierAmount: count * p(DT8_150W.price, tier),
-    })
-    const da4m = CONTROLS['DA4m']
-    items.push({
-      description: 'DA4m DALI Controller',
-      qty: count, unit: 'nos',
-      dealerRate: da4m.dealer, tierRate: p(da4m, tier),
-      dealerAmount: count * da4m.dealer, tierAmount: count * p(da4m, tier),
-    })
-    items.push(...controlAndRemote('tunable', tier))
-  } else if (lightType === 'tunable') {
-    // Standard tunable: standard drivers + Power Repeater SC + Controller Tunable
-    const sorted = Object.entries(STANDARD_DRIVERS).sort((a, b) => a[1].watts - b[1].watts)
-    const counts: Record<string, number> = {}
-    let rem = required
-    while (rem > 0) {
-      const fit = sorted.find(([, s]) => s.watts >= rem)
-      if (fit) { counts[fit[0]] = (counts[fit[0]] || 0) + 1; rem = 0 }
-      else { const lg = sorted[sorted.length - 1]; counts[lg[0]] = (counts[lg[0]] || 0) + 1; rem -= lg[1].watts }
-    }
-    for (const [name, qty] of Object.entries(counts)) {
-      const spec = STANDARD_DRIVERS[name]
+    const drvCount = Math.ceil(totalModules / DALI_TW_MOD_PER_DRV)
+    const da4mCount = Math.ceil(drvCount / 3)
+    if (daliDriver === 'da4m') {
+      items.push(addCtrl('DA4m', drvCount, tier))
+    } else {
       items.push({
-        description: `${name} Driver`,
-        qty, unit: 'nos',
-        dealerRate: spec.price.dealer, tierRate: p(spec.price, tier),
-        dealerAmount: qty * spec.price.dealer, tierAmount: qty * p(spec.price, tier),
+        description: `DT8 150W Driver [max 10 modules each]`,
+        qty: drvCount, unit: 'nos',
+        dealerRate: DT8_150W.price.dealer, tierRate: p(DT8_150W.price, tier),
+        dealerAmount: drvCount * DT8_150W.price.dealer, tierAmount: drvCount * p(DT8_150W.price, tier),
       })
+      items.push(addCtrl('DA4m', da4mCount, tier))
     }
-    // Power Repeater Single Colour for tunable (per spec)
-    const rep = CONTROLS['Power Repeater Single Colour']
-    items.push({
-      description: 'Power Repeater Single Colour',
-      qty: 1, unit: 'nos',
-      dealerRate: rep.dealer, tierRate: p(rep, tier),
-      dealerAmount: rep.dealer, tierAmount: p(rep, tier),
-    })
-    items.push(...controlAndRemote('tunable', tier))
+
   } else if (lightType === 'single_color_dimmable') {
-    const count = Math.ceil(required / DALI2_DRIVE_200W.watts)
+    const drvCount = Math.ceil(totalModules / DALI_SC_MOD_PER_DRV)
+    const da4mCount = Math.ceil(drvCount / 3)
     items.push({
-      description: 'DALI 2 Drive 200W (Dimmable)',
-      qty: count, unit: 'nos',
-      dealerRate: DALI2_DRIVE_200W.price.dealer,
-      tierRate: p(DALI2_DRIVE_200W.price, tier),
-      dealerAmount: count * DALI2_DRIVE_200W.price.dealer,
-      tierAmount: count * p(DALI2_DRIVE_200W.price, tier),
+      description: `DT2 200W Driver [max 13 modules each]`,
+      qty: drvCount, unit: 'nos',
+      dealerRate: DALI2_DRIVE_200W.price.dealer, tierRate: p(DALI2_DRIVE_200W.price, tier),
+      dealerAmount: drvCount * DALI2_DRIVE_200W.price.dealer, tierAmount: drvCount * p(DALI2_DRIVE_200W.price, tier),
     })
-    const da4m = CONTROLS['DA4m']
-    items.push({
-      description: 'DA4m DALI Controller',
-      qty: count, unit: 'nos',
-      dealerRate: da4m.dealer, tierRate: p(da4m, tier),
-      dealerAmount: count * da4m.dealer, tierAmount: count * p(da4m, tier),
-    })
-    items.push(...controlAndRemote('single', tier))
-  } else {
-    // Single colour / RGB / RGBW — standard CV drivers
-    const sorted = Object.entries(STANDARD_DRIVERS).sort((a, b) => a[1].watts - b[1].watts)
-    const counts: Record<string, number> = {}
-    let rem = required
-    while (rem > 0) {
-      const fit = sorted.find(([, s]) => s.watts >= rem)
-      if (fit) { counts[fit[0]] = (counts[fit[0]] || 0) + 1; rem = 0 }
-      else { const lg = sorted[sorted.length - 1]; counts[lg[0]] = (counts[lg[0]] || 0) + 1; rem -= lg[1].watts }
-    }
-    for (const [name, qty] of Object.entries(counts)) {
+    items.push(addCtrl('DA4m', da4mCount, tier))
+
+  } else if (lightType === 'tunable') {
+    // Standard Tunable White — all available driver sizes + EV2 (1 per driver) + V2 Controller (1 per 4 EV2) + RT2 Remote
+    const specs = makeDriverSpecs(LED_WATTS_PER_M)
+    const forcedSpec = preferredDriverWatt ? specs.find(s => s.key === preferredDriverWatt) : null
+    const drvCounts = forcedSpec
+      ? { [forcedSpec.key]: Math.ceil(totalModules / forcedSpec.modules) }
+      : packDrivers(totalModules, specs)
+    let totalDrivers = 0
+    for (const [name, qty] of Object.entries(drvCounts)) {
       const spec = STANDARD_DRIVERS[name]
       items.push({
-        description: `${name} Driver`,
+        description: `${name} Driver (Tunable White)`,
+        qty, unit: 'nos',
+        dealerRate: spec.price.dealer, tierRate: p(spec.price, tier),
+        dealerAmount: qty * spec.price.dealer, tierAmount: qty * p(spec.price, tier),
+      })
+      totalDrivers += qty
+    }
+    const ev2Count = totalDrivers
+    const v2Count  = Math.max(1, Math.ceil(ev2Count / 4))
+    items.push(addCtrl('EV2 Power Repeater', ev2Count, tier))
+    items.push(addCtrl('V2 Controller', v2Count, tier))
+    items.push(addCtrl('RT2 Remote', 1, tier))
+
+  } else if (lightType === 'single_color') {
+    // Single Colour — drivers only (no controller, remote, or power repeater)
+    const scWatts = ledModuleType === '12dot' ? SC_WATTS_PER_M_12DOT : SC_WATTS_PER_M_STANDARD
+    const specs = makeDriverSpecs(scWatts)
+    const forcedSpec = preferredDriverWatt ? specs.find(s => s.key === preferredDriverWatt) : null
+    const drvCounts = forcedSpec
+      ? { [forcedSpec.key]: Math.ceil(totalModules / forcedSpec.modules) }
+      : packDrivers(totalModules, specs)
+    for (const [name, qty] of Object.entries(drvCounts)) {
+      const spec = STANDARD_DRIVERS[name]
+      items.push({
+        description: `${name} Driver (Single Colour)`,
         qty, unit: 'nos',
         dealerRate: spec.price.dealer, tierRate: p(spec.price, tier),
         dealerAmount: qty * spec.price.dealer, tierAmount: qty * p(spec.price, tier),
       })
     }
-    if (lightType === 'rgb' || lightType === 'rgbw') {
-      items.push(...controlAndRemote('tunable', tier))
-    } else if (lightType === 'single_color') {
-      // Power repeater for long runs
-      if (runningMeters > 20) {
-        const rep = CONTROLS['Power Repeater Single Colour']
-        items.push({
-          description: 'Power Repeater Single Colour',
-          qty: 1, unit: 'nos',
-          dealerRate: rep.dealer, tierRate: p(rep, tier),
-          dealerAmount: rep.dealer, tierAmount: p(rep, tier),
-        })
-      }
-    }
+
+  } else if (lightType === 'rgb' || lightType === 'rgbw') {
+    const totalWatts = totalModules * LED_WATTS_PER_M
+    const required = totalWatts * 1.2
+    const count = Math.ceil(required / STANDARD_DRIVERS['600W'].watts)
+    const spec = STANDARD_DRIVERS['600W']
+    items.push({
+      description: '600W Driver (RGB/RGBW)',
+      qty: count, unit: 'nos',
+      dealerRate: spec.price.dealer, tierRate: p(spec.price, tier),
+      dealerAmount: count * spec.price.dealer, tierAmount: count * p(spec.price, tier),
+    })
+    items.push(addCtrl('V2 Controller', 1, tier))
+    items.push(addCtrl('RT2 Remote', 1, tier))
   }
 
   return items
 }
 
-function controlAndRemote(type: 'single' | 'tunable', tier: PriceTier): LineItem[] {
-  const ctrlKey = type === 'single' ? 'Controller Single Colour' : 'Controller Tunable/RGB'
-  const remKey  = type === 'single' ? 'Remote Single Colour'     : 'Remote Tunable/RGB'
-  const ctrl = CONTROLS[ctrlKey], rem = CONTROLS[remKey]
-  return [
-    {
-      description: ctrlKey, qty: 1, unit: 'nos',
-      dealerRate: ctrl.dealer, tierRate: p(ctrl, tier),
-      dealerAmount: ctrl.dealer, tierAmount: p(ctrl, tier),
-    },
-    {
-      description: remKey, qty: 1, unit: 'nos',
-      dealerRate: rem.dealer, tierRate: p(rem, tier),
-      dealerAmount: rem.dealer, tierAmount: p(rem, tier),
-    },
-  ]
-}
-
-export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: number): ItemBreakdown {
+export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: number, manualRates?: ManualRates): ItemBreakdown {
   const geo = getGeometry(item)
   const { widthM, lengthM, areaM2, perimeterM } = geo
   const lineItems: LineItem[] = []
+  // All line items below carry TOTAL quantities (per-unit × item.quantity) so that
+  // the displayed qty, costing, PDFs and reports always agree — no hidden multipliers.
+  const qty = Math.max(1, Math.round(item.quantity || 1))
 
-  // Fabric
-  const fabricDetail = computeFabricDetail(widthM, lengthM, item)
+  // When tier is 'manual', use manualRates for fabric/led/gripper; use chosen tier for other items
+  const effectiveTier: PriceTier = tier === 'manual'
+    ? (manualRates?.otherItemsTier ?? 'dealer')
+    : tier
+
+  // Fabric (margins applied to billing dims only — not to area/perimeter/LED/installation)
+  const marginM = (item.marginMM ?? 0) / 1000
+  let fabricDetail: FabricDetail
+  if (item.shape === 'circle') {
+    // Circles: roll billing with 1m minimum roll width; cut = diameter + margin (default 200mm per side)
+    const D = geo.dim1M
+    const circleMargin = marginM > 0 ? marginM : 0.2  // default 200mm per side for circles
+    const CIRCLE_ROLLS = [1, 2, 3, 4, 5]
+    const roll = CIRCLE_ROLLS.find(r => r >= D) ?? 5
+    const cutLength = round2(D + 2 * circleMargin)
+    const panelArea = round2(roll * cutLength)
+    const usedArea = round2(Math.PI * (D / 2) ** 2) // actual circle area
+    const wastageArea = round2(panelArea - usedArea)
+    fabricDetail = {
+      panels: [{
+        rollWidth: roll,
+        physicalWidth: round2(D),
+        cutLength,
+        panelArea,
+        usedArea,
+        wastageArea,
+        wastagePercent: round2((wastageArea / panelArea) * 100),
+        orientation: `${roll}m roll × ${cutLength.toFixed(2)}m cut (circle, ${Math.round(circleMargin * 1000)}mm margin/side)`,
+        isJoint: false,
+      }],
+      totalBilledArea: panelArea,
+      totalUsedArea: usedArea,
+      totalWastageArea: wastageArea,
+      hasJoint: false,
+      jointPosition: '',
+    }
+  } else {
+    // Apply smart margin to rectangle/triangle/l-shape fabric dims
+    const { d1M: fd1, d2M: fd2 } = applySmartMargin(geo.dim1M, geo.dim2M, marginM)
+    fabricDetail = computeFabricDetail(fd1, fd2, item)
+  }
   const fabPrice = FABRIC[item.fabricType] ?? FABRIC['Descor Premium']
+  const fabRate = tier === 'manual' && manualRates ? manualRates.fabricPerSqm : p(fabPrice, effectiveTier)
+  const fabricTotalQty = round2(fabricDetail.totalBilledArea * qty)
   lineItems.push({
-    description: `${item.fabricType} Fabric [${fabricDetail.panels[0]?.orientation ?? ''}, waste ${fabricDetail.totalWastageArea.toFixed(2)} sqm]`,
-    qty: round2(fabricDetail.totalBilledArea),
+    description: `${item.fabricType} Fabric [${fabricDetail.panels[0]?.orientation ?? ''}, waste ${fabricDetail.totalWastageArea.toFixed(2)} sqm${qty > 1 ? ` × ${qty} pcs` : ''}]`,
+    qty: fabricTotalQty,
     unit: 'sqm',
-    dealerRate: fabPrice.dealer, tierRate: p(fabPrice, tier),
-    dealerAmount: round2(fabricDetail.totalBilledArea * fabPrice.dealer),
-    tierAmount:   round2(fabricDetail.totalBilledArea * p(fabPrice, tier)),
+    dealerRate: fabPrice.dealer, tierRate: fabRate,
+    dealerAmount: round2(fabricTotalQty * fabPrice.dealer),
+    tierAmount:   round2(fabricTotalQty * fabRate),
   })
 
   if (item.withPrinting) {
+    const printRate = item.printingRatePerSqm ?? p(PRINTING, effectiveTier)
+    const printQty = round2(areaM2 * qty)
     lineItems.push({
       description: 'Printing Charges',
-      qty: round2(areaM2), unit: 'sqm',
-      dealerRate: PRINTING.dealer, tierRate: p(PRINTING, tier),
-      dealerAmount: round2(areaM2 * PRINTING.dealer),
-      tierAmount:   round2(areaM2 * p(PRINTING, tier)),
+      qty: printQty, unit: 'sqm',
+      dealerRate: PRINTING.dealer, tierRate: printRate,
+      dealerAmount: round2(printQty * PRINTING.dealer),
+      tierAmount:   round2(printQty * printRate),
     })
   }
 
   if (item.withFleece) {
+    const fleeceQty = round2(areaM2 * qty)
     lineItems.push({
       description: 'Felt Pad / Fleece',
-      qty: round2(areaM2), unit: 'sqm',
-      dealerRate: FLEECE.dealer, tierRate: p(FLEECE, tier),
-      dealerAmount: round2(areaM2 * FLEECE.dealer),
-      tierAmount:   round2(areaM2 * p(FLEECE, tier)),
+      qty: fleeceQty, unit: 'sqm',
+      dealerRate: FLEECE.dealer, tierRate: p(FLEECE, effectiveTier),
+      dealerAmount: round2(fleeceQty * FLEECE.dealer),
+      tierAmount:   round2(fleeceQty * p(FLEECE, effectiveTier)),
     })
   }
 
-  // Gripper
-  let gripQty = Math.ceil(perimeterM * 10) / 10
-  // Add gripper for joint line if jointed
-  if (fabricDetail.hasJoint) {
-    gripQty = round2(gripQty + widthM)
+  // Gripper — each panel (fabric box) needs its own perimeter.
+  // Gripper is supplied in 1m lengths only, so the per-ceiling quantity is ALWAYS
+  // rounded UP to the next whole metre (Math.ceil). E.g. 1.2 → 2, 2.7 → 3, 3.0 → 3.
+  let gripQty: number
+  let gripDesc: string
+  if (fabricDetail.hasJoint && fabricDetail.panels.length > 1) {
+    // Sum perimeters of all physical panels: 2*(physicalWidth + cutLength) per panel
+    gripQty = Math.ceil(
+      fabricDetail.panels.reduce((s, p) => s + 2 * (p.physicalWidth + p.cutLength), 0)
+    )
+    const panelDescs = fabricDetail.panels.map((p, i) =>
+      `P${i+1}: 2×(${p.physicalWidth.toFixed(2)}+${p.cutLength.toFixed(2)})m`
+    ).join(', ')
+    gripDesc = `${item.gripperType} Gripper (${panelDescs})`
+  } else {
+    gripQty = Math.ceil(perimeterM)
+    gripDesc = `${item.gripperType} Gripper`
   }
   const gripPrice = GRIPPER[item.gripperType] ?? GRIPPER['CW']
+  const gripRate = tier === 'manual' && manualRates ? manualRates.gripperPerRmt : p(gripPrice, effectiveTier)
+  // Per-ceiling gripper is already ceiled to whole metres; multiply by quantity
+  const gripTotalQty = gripQty * qty
   lineItems.push({
-    description: `${item.gripperType} Gripper${fabricDetail.hasJoint ? ' (incl. joint line)' : ''}`,
-    qty: round2(gripQty), unit: 'rmt',
-    dealerRate: gripPrice.dealer, tierRate: p(gripPrice, tier),
-    dealerAmount: round2(gripQty * gripPrice.dealer),
-    tierAmount:   round2(gripQty * p(gripPrice, tier)),
+    description: gripDesc,
+    qty: gripTotalQty, unit: 'rmt',
+    dealerRate: gripPrice.dealer, tierRate: gripRate,
+    dealerAmount: round2(gripTotalQty * gripPrice.dealer),
+    tierAmount:   round2(gripTotalQty * gripRate),
   })
 
   // LED
   let ledDetail: LEDDetail | null = null
   if (item.lightType !== 'none') {
-    const depthIn = item.lightDepth ?? 6
-    const stripSpacingInches = depthIn  // spacing between strips = depth
-    const spacingMM = depthIn * 25.4    // convert inches to mm
-    // strips = ceil(width / spacing) + 1  (one extra for safety, matches Pongs practice)
-    const widthMM = widthM * 1000
-    const stripCount = Math.ceil(widthMM / spacingMM) + 1
-    const runningLengthM = lengthM
+    // Strips are counted across the SHORTER dimension, run along the LONGER dimension.
+    // This is correct regardless of how the fabric is oriented.
+    const ledShortM = Math.min(geo.dim1M, geo.dim2M)
+    const ledLongM  = Math.max(geo.dim1M, geo.dim2M)
+    const spacingMM = item.ledSpacingMM ?? 125   // default 125mm gap between strips
+    const stripSpacingInches = round2(spacingMM / 25.4)
+    // strips = ceil(shorter_dim / spacing) + 1  (one extra, matches Pongs practice)
+    // For circles, use 80% of the bounding-square strip count
+    const rawStripCount = Math.ceil((ledShortM * 1000) / spacingMM) + 1
+    const stripCount = item.shape === 'circle' ? Math.ceil(rawStripCount * 0.8) : rawStripCount
+    // Each strip runs the full long dimension, rounded UP to nearest 1m LED module
+    const runningLengthM = Math.ceil(ledLongM * 1000 / 1000)  // = ceil(mm/1000) metres
     const totalRunningMeters = round2(stripCount * runningLengthM)
-    const totalWatts = round2(totalRunningMeters * LED_WATTS_PER_M)
+    // Correct wattage per metre depending on light type
+    const isSC = item.lightType === 'single_color' || item.lightType === 'single_color_dimmable'
+    const wattsPerM = isSC
+      ? (item.ledModuleType === '12dot' ? SC_WATTS_PER_M_12DOT : SC_WATTS_PER_M_STANDARD)
+      : LED_WATTS_PER_M
+    const totalWatts = round2(totalRunningMeters * wattsPerM)
     ledDetail = { stripCount, runningLengthM, totalRunningMeters, totalWatts, stripSpacingInches }
 
     const lKey = ledKey(item)
     const ledPrice = LED[lKey]
+    const ledRate = tier === 'manual' && manualRates ? manualRates.ledPerMtr : p(ledPrice, effectiveTier)
+    const ledTotalQty = round2(totalRunningMeters * qty)
     lineItems.push({
-      description: `LED ${lKey} [${stripCount} strips × ${runningLengthM.toFixed(2)}m · ${LED_WATTS_PER_M}W/m = ${totalWatts}W total]`,
-      qty: totalRunningMeters, unit: 'mtr',
-      dealerRate: ledPrice.dealer, tierRate: p(ledPrice, tier),
-      dealerAmount: round2(totalRunningMeters * ledPrice.dealer),
-      tierAmount:   round2(totalRunningMeters * p(ledPrice, tier)),
+      description: `LED ${lKey} [${stripCount} strips × ${runningLengthM.toFixed(2)}m · ${wattsPerM}W/m = ${totalWatts}W${qty > 1 ? ` × ${qty} pcs = ${round2(totalWatts * qty)}W total` : ' total'}]`,
+      qty: ledTotalQty, unit: 'mtr',
+      dealerRate: ledPrice.dealer, tierRate: ledRate,
+      dealerAmount: round2(ledTotalQty * ledPrice.dealer),
+      tierAmount:   round2(ledTotalQty * ledRate),
     })
 
-    lineItems.push(...buildDriverLines(totalWatts, item.lightType, tier, totalRunningMeters))
+    // Lighting configuration:
+    //  - Non-Looped (default / legacy): each ceiling is an independent circuit —
+    //    drivers are calculated per ceiling, then multiplied by quantity.
+    //  - Looped: all ceilings form one continuous lighting system — LED modules are
+    //    summed across the full quantity FIRST, then drivers are selected once from
+    //    the combined wattage. This usually yields fewer drivers.
+    const isLooped = item.lightingConfig === 'looped'
+    let driverLines: LineItem[]
+    if (isLooped) {
+      driverLines = buildDriverLines(totalRunningMeters * qty, item.lightType, effectiveTier, item.daliDriver, item.preferredDriverWatt, item.ledModuleType)
+    } else {
+      driverLines = buildDriverLines(totalRunningMeters, item.lightType, effectiveTier, item.daliDriver, item.preferredDriverWatt, item.ledModuleType)
+      // Scale per-ceiling driver counts to the full quantity
+      for (const dl of driverLines) {
+        dl.qty = dl.qty * qty
+        dl.dealerAmount = round2(dl.qty * dl.dealerRate)
+        dl.tierAmount = round2(dl.qty * dl.tierRate)
+      }
+    }
+    // Apply manual overrides — user can increase or decrease qty (override = TOTAL count)
+    const overrides = item.driverOverrides ?? {}
+    for (const dl of driverLines) {
+      const ov = overrides[dl.description]
+      if (ov !== undefined && ov >= 0 && ov !== dl.qty) {
+        dl.qty = ov
+        dl.dealerAmount = round2(ov * dl.dealerRate)
+        dl.tierAmount = round2(ov * dl.tierRate)
+      }
+    }
+    lineItems.push(...driverLines)
   }
 
-  const subtotalDealer = lineItems.reduce((s, l) => s + l.dealerAmount, 0)
-  const subtotalTier   = lineItems.reduce((s, l) => s + l.tierAmount,   0)
+  // Line items already carry TOTAL quantities — no further multiplication here
+  const subtotalDealer = round2(lineItems.reduce((s, l) => s + l.dealerAmount, 0))
+  const subtotalTier   = round2(lineItems.reduce((s, l) => s + l.tierAmount,   0))
 
   const rate = installRate ?? INSTALLATION_RATE_PER_SQFT
-  const installationCost = round2(areaM2 * SQFT_PER_SQM * rate * item.quantity)
-  const subtotalFinal = round2(subtotalTier * item.quantity)
+  const installationCost = round2(areaM2 * SQFT_PER_SQM * rate * qty)
+  const subtotalFinal = subtotalTier
 
   return {
     item,
@@ -447,8 +639,8 @@ export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: 
     ledDetail,
     lineItems,
     installationCost,
-    subtotalDealer: round2(subtotalDealer * item.quantity),
-    subtotalTier:   round2(subtotalTier   * item.quantity),
+    subtotalDealer,
+    subtotalTier,
     subtotalFinal,
     itemTotal: round2(subtotalFinal + installationCost),
   }
@@ -457,7 +649,7 @@ export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: 
 export function calculateQuote(quote: Quote): QuoteBreakdown {
   const tier = quote.priceTier
   const rate = quote.installationRatePerSqft ?? INSTALLATION_RATE_PER_SQFT
-  const itemBreakdowns = quote.items.map(item => calculateItem(item, tier, rate))
+  const itemBreakdowns = quote.items.map(item => calculateItem(item, tier, rate, quote.manualRates))
 
   const materialsTotalDealer = round2(itemBreakdowns.reduce((s, b) => s + b.subtotalDealer, 0))
   const materialsTotalTier   = round2(itemBreakdowns.reduce((s, b) => s + b.subtotalTier,   0))
@@ -492,6 +684,11 @@ export function calculateQuote(quote: Quote): QuoteBreakdown {
 
 export function round2(n: number): number {
   return Math.round(n * 100) / 100
+}
+
+// Round up to nearest 0.5m — used for billing cut lengths and gripper perimeter
+function roundUpHalf(m: number): number {
+  return Math.ceil(m * 2) / 2
 }
 
 export function fmtINR(n: number): string {

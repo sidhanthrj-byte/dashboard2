@@ -29,24 +29,29 @@ export const GRIPPER: Record<string, Price> = {
 }
 
 export const LED: Record<string, Price> = {
-  'Single Colour':       { dealer: 170, msp: 270, specifiors: 220 },
-  'Tunable':             { dealer: 270, msp: 370, specifiors: 320 },
-  'RGB':                 { dealer: 220, msp: 320, specifiors: 270 },
-  'RGBW/NW/WW':          { dealer: 270, msp: 370, specifiors: 345 },
-  'Wider Single Colour': { dealer: 220, msp: 320, specifiors: 270 },
-  'Wider Tunable':       { dealer: 370, msp: 470, specifiors: 425 },
+  'Single Colour':          { dealer: 170, msp: 270, specifiors: 220 },
+  'Single Colour 12Dot':    { dealer: 170, msp: 270, specifiors: 220 },
+  'Tunable':                { dealer: 270, msp: 370, specifiors: 320 },
+  'RGB':                    { dealer: 220, msp: 320, specifiors: 270 },
+  'RGBW/NW/WW':             { dealer: 270, msp: 370, specifiors: 345 },
+  'Wider Single Colour':    { dealer: 220, msp: 320, specifiors: 270 },
+  'Wider Tunable':          { dealer: 370, msp: 470, specifiors: 425 },
 }
 
-// 1 metre = 12 LED dots, 1 dot = 1W → 12W per metre for all strip types
-export const LED_WATTS_PER_M = 12
+// 1 LED module = 1000mm
+// Tunable/RGB: 13W/m  |  Single Colour standard (10 dot): 12.5W/m  |  12-dot: 15W/m
+export const LED_WATTS_PER_M = 13
+export const SC_WATTS_PER_M_STANDARD = 12.5
+export const SC_WATTS_PER_M_12DOT    = 15
 
-export const INSTALLATION_RATE_PER_SQFT = 60   // ₹ per sqft
+export const INSTALLATION_RATE_PER_SQFT = 120  // ₹ per sqft
 export const SQFT_PER_SQM = 10.7639
 
 export interface DriverSpec { watts: number; price: Price }
 
+// Standard drivers — all sizes from price list
 export const STANDARD_DRIVERS: Record<string, DriverSpec> = {
-  '50W':  { watts: 50,  price: { dealer: 1000, msp: 1500, specifiors: 1300 } },
+  '50W':  { watts:  50, price: { dealer: 1000, msp: 1500, specifiors: 1300 } },
   '100W': { watts: 100, price: { dealer: 1200, msp: 1900, specifiors: 1800 } },
   '150W': { watts: 150, price: { dealer: 1500, msp: 2200, specifiors: 1900 } },
   '200W': { watts: 200, price: { dealer: 1900, msp: 2500, specifiors: 2000 } },
@@ -71,13 +76,16 @@ export const XLG_200I: DriverSpec = {
 }
 
 export const CONTROLS: Record<string, Price> = {
-  'DA4m':                        { dealer: 1800, msp: 2300, specifiors: 2100 },
-  'Controller Single Colour':    { dealer: 1300, msp: 1600, specifiors: 1500 },
-  'Controller Tunable/RGB':      { dealer: 1500, msp: 1900, specifiors: 1700 },
-  'Remote Single Colour':        { dealer: 1600, msp: 2000, specifiors: 1800 },
-  'Remote Tunable/RGB':          { dealer: 1700, msp: 2100, specifiors: 1900 },
-  'Power Repeater Single Colour':{ dealer: 1700, msp: 2000, specifiors: 1900 },
-  'Power Repeater Tunable/RGB':  { dealer: 1800, msp: 2100, specifiors: 2000 },
+  // DALI controller (1 per 3 DALI drivers)
+  'DA4m':                { dealer: 1800, msp: 2300, specifiors: 2100 },
+  // Single Colour system
+  'EV1 Power Repeater':  { dealer: 1700, msp: 2000, specifiors: 1900 },
+  'V1 Controller':       { dealer: 1300, msp: 1600, specifiors: 1500 },
+  'RT1 Remote':          { dealer: 1600, msp: 2000, specifiors: 1800 },
+  // Standard Tunable / Standard Dimmable system
+  'EV2 Power Repeater':  { dealer: 1800, msp: 2100, specifiors: 2000 },
+  'V2 Controller':       { dealer: 1500, msp: 1900, specifiors: 1700 },
+  'RT2 Remote':          { dealer: 1700, msp: 2100, specifiors: 1900 },
 }
 
 export const FLEECE: Price = { dealer: 500, msp: 1000, specifiors: 700 }
@@ -85,5 +93,6 @@ export const FLEECE: Price = { dealer: 500, msp: 1000, specifiors: 700 }
 export const ROLL_WIDTHS = [2, 3, 4, 5] // metres, ascending
 
 export function p(price: Price, tier: PriceTier): number {
+  if (tier === 'manual') return price.dealer
   return price[tier]
 }

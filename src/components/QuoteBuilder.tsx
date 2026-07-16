@@ -1,13 +1,14 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Save, Loader2, CheckCircle, BookUser, Trash2 } from 'lucide-react'
+import { Plus, Save, Loader2, BookUser, Trash2, ChevronUp } from 'lucide-react'
 import { v4 as uuid } from 'uuid'
 import { useRouter } from 'next/navigation'
 import CeilingItemForm, { defaultItem } from './CeilingItemForm'
-import type { Quote, CeilingItem, PriceTier, QuoteDisplayMode } from '@/lib/types'
+import type { Quote, CeilingItem, PriceTier, QuoteDisplayMode, ManualRates } from '@/lib/types'
 import { calculateQuote, fmtINR } from '@/lib/calculations'
 import { listClients, saveClient, deleteClient, type SavedClient } from '@/lib/clients'
+import { listCompanies, DEFAULT_COMPANY } from '@/lib/companies'
 
 interface Props {
   initial?: Quote
@@ -17,7 +18,7 @@ interface Props {
 export default function QuoteBuilder({ initial, mode }: Props) {
   const router = useRouter()
   const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
+  const [savingInternal, setSavingInternal] = useState(false)
 
   const today = new Date().toISOString().split('T')[0]
   const validUntil = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0]
@@ -32,12 +33,17 @@ export default function QuoteBuilder({ initial, mode }: Props) {
     validUntil: initial?.validUntil ?? validUntil,
     priceTier: (initial?.priceTier ?? 'msp') as PriceTier,
     markupPercent: initial?.markupPercent ?? 0,
-    installationRatePerSqft: initial?.installationRatePerSqft ?? 60,
+    installationRatePerSqft: initial?.installationRatePerSqft ?? 120,
     transportCost: initial?.transportCost ?? 0,
     includeGst: initial?.includeGst ?? false,
     displayMode: (initial?.displayMode ?? 'total') as QuoteDisplayMode,
     notes: initial?.notes ?? '',
+    company: initial?.company ?? DEFAULT_COMPANY,
   })
+
+  const [manualRates, setManualRates] = useState<ManualRates>(
+    initial?.manualRates ?? { fabricPerSqm: 0, ledPerMtr: 0, gripperPerRmt: 0, otherItemsTier: 'msp' }
+  )
 
   const [items, setItems] = useState<CeilingItem[]>(
     initial?.items?.length ? initial.items : [defaultItem(uuid())]
@@ -46,6 +52,7 @@ export default function QuoteBuilder({ initial, mode }: Props) {
   const [preview, setPreview] = useState<ReturnType<typeof calculateQuote> | null>(null)
   const [clients, setClients] = useState<SavedClient[]>([])
   const [showClientBook, setShowClientBook] = useState(false)
+  const [showBreak, setShowBreak] = useState(false)
 
   useEffect(() => { setClients(listClients()) }, [])
 
@@ -92,12 +99,13 @@ export default function QuoteBuilder({ initial, mode }: Props) {
         id: '', quoteNumber: '', createdAt: '', updatedAt: '',
         ...meta,
         items,
+        manualRates: meta.priceTier === 'manual' ? manualRates : undefined,
       }
       setPreview(calculateQuote(fakeQuote))
     } catch {
       setPreview(null)
     }
-  }, [meta, items])
+  }, [meta, items, manualRates])
 
   useEffect(() => { updatePreview() }, [updatePreview])
 
@@ -113,307 +121,309 @@ export default function QuoteBuilder({ initial, mode }: Props) {
     setItems(prev => prev.filter((_, i) => i !== idx))
   }
 
-  async function handleSave() {
+  async function saveQuote(redirectTo: 'team' | 'internal' = 'team') {
     if (!meta.clientName.trim()) { alert('Please enter a client name.'); return }
     if (items.length === 0) { alert('Please add at least one ceiling item.'); return }
 
-    setSaving(true)
-    const payload = { ...meta, items }
-    const url = mode === 'edit' ? `/api/quotes/${initial!.id}` : '/api/quotes'
-    const method = mode === 'edit' ? 'PUT' : 'POST'
-    const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-    const savedQ = await res.json()
-    setSaving(false)
-    setSaved(true)
-    setTimeout(() => router.push(`/quotes/${savedQ.id}/team`), 800)
+    const isInternal = redirectTo === 'internal'
+    if (isInternal) setSavingInternal(true)
+    else setSaving(true)
+
+    try {
+      const payload = { ...meta, items, manualRates: meta.priceTier === 'manual' ? manualRates : undefined }
+      const url = mode === 'edit' ? `/api/quotes/${initial!.id}` : '/api/quotes'
+      const method = mode === 'edit' ? 'PUT' : 'POST'
+      const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      if (!res.ok) {
+        const err = await res.text()
+        alert(`Save failed (${res.status}): ${err}`)
+        setSaving(false); setSavingInternal(false)
+        return
+      }
+      const savedQ = await res.json()
+      if (!savedQ?.id) {
+        alert('Save failed: unexpected server response')
+        setSaving(false); setSavingInternal(false)
+        return
+      }
+      if (isInternal) {
+        setSavingInternal(false)
+        router.push(`/quotes/${savedQ.id}/internal`)
+      } else {
+        setSaving(false)
+        router.push(`/quotes/${savedQ.id}/team`)
+      }
+    } catch (e) {
+      alert(`Save error: ${e}`)
+      setSaving(false); setSavingInternal(false)
+    }
   }
+
+  function handleSave() { return saveQuote('team') }
 
   const TIER_OPTIONS: { value: PriceTier; label: string; desc: string }[] = [
     { value: 'dealer', label: 'Dealer', desc: 'Dealer pricing' },
     { value: 'msp', label: 'MSP', desc: 'Market selling price' },
     { value: 'specifiors', label: 'Specifiors', desc: 'Architects / Specifiers' },
+    { value: 'manual', label: 'Manual', desc: 'Set custom rates' },
   ]
 
+  const SectionHead = ({ n, title, note, right }: { n: string; title: string; note?: string; right?: React.ReactNode }) => (
+    <div className="flex items-end justify-between mb-4">
+      <div className="flex items-baseline gap-3">
+        <span className="fig text-[12px] font-medium" style={{ color: 'var(--accent)' }}>{n}</span>
+        <h2 className="font-display text-[17px] font-semibold" style={{ color: 'var(--ink)' }}>{title}</h2>
+        {note && <span className="text-[12px]" style={{ color: 'var(--faint)' }}>{note}</span>}
+      </div>
+      {right}
+    </div>
+  )
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-      {/* Main form */}
-      <div className="lg:col-span-2 space-y-6">
+    <div className="max-w-3xl mx-auto pb-28">
 
-        {/* Client Book */}
-        <div className="card p-4">
-          <div className="flex items-center justify-between">
-            <button onClick={() => setShowClientBook(v => !v)}
-              className="flex items-center gap-2 text-sm font-medium text-slate-700 hover:text-slate-900">
-              <BookUser size={16} />
-              {showClientBook ? 'Hide Client Book' : 'Load from Client Book'}
-              {clients.length > 0 && (
-                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs">{clients.length}</span>
-              )}
-            </button>
-            <button onClick={saveCurrentClient}
-              className="text-xs text-slate-500 hover:text-slate-800 flex items-center gap-1">
-              <Save size={12} /> Save current client
-            </button>
-          </div>
-          {showClientBook && (
-            <div className="mt-3 space-y-1.5 max-h-48 overflow-y-auto">
-              {clients.length === 0 && (
-                <p className="text-sm text-slate-400 italic">No saved clients yet. Fill in client details above and click &quot;Save current client&quot;.</p>
-              )}
-              {clients.map(c => (
-                <div key={c.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 group">
-                  <button onClick={() => loadClient(c)} className="flex-1 text-left">
-                    <p className="text-sm font-medium text-slate-800">{c.name}</p>
-                    <p className="text-xs text-slate-400">{c.location} · {c.priceTier.toUpperCase()}{c.markupPercent ? ` +${c.markupPercent}%` : ''}</p>
-                  </button>
-                  <button onClick={() => removeClient(c.id)}
-                    className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-rose-500 transition-opacity">
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-              ))}
-            </div>
+      {/* Client book */}
+      <div className="flex items-center justify-between py-3" style={{ borderBottom: '1px solid var(--rule)' }}>
+        <button onClick={() => setShowClientBook(v => !v)}
+          className="flex items-center gap-2 text-[13px] font-medium transition-colors" style={{ color: 'var(--ink-2)' }}>
+          <BookUser size={15} />
+          {showClientBook ? 'Hide client book' : 'Load from client book'}
+          {clients.length > 0 && <span className="fig text-[11px]" style={{ color: 'var(--faint)' }}>({clients.length})</span>}
+        </button>
+        <button onClick={saveCurrentClient} className="btn-ghost btn-sm"><Save size={13} /> Save client</button>
+      </div>
+      {showClientBook && (
+        <div className="py-3 space-y-1 max-h-52 overflow-y-auto animate-fade-in" style={{ borderBottom: '1px solid var(--rule)' }}>
+          {clients.length === 0 && (
+            <p className="text-[13px] italic" style={{ color: 'var(--faint)' }}>No saved clients yet — fill in details below and click “Save client”.</p>
           )}
+          {clients.map(c => (
+            <div key={c.id} className="flex items-center justify-between px-3 py-2 rounded-[3px] hover:bg-[color:var(--sheet-2)] group">
+              <button onClick={() => loadClient(c)} className="flex-1 text-left">
+                <p className="text-[13px] font-medium" style={{ color: 'var(--ink)' }}>{c.name}</p>
+                <p className="fig text-[10.5px] uppercase mt-0.5" style={{ color: 'var(--faint)' }}>{c.location} · {c.priceTier.toUpperCase()}{c.markupPercent ? ` +${c.markupPercent}%` : ''}</p>
+              </button>
+              <button onClick={() => removeClient(c.id)} className="opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: 'var(--faint)' }}>
+                <Trash2 size={13} />
+              </button>
+            </div>
+          ))}
         </div>
+      )}
 
-        {/* Project details */}
-        <div className="card p-6">
-          <h2 className="font-semibold text-slate-800 mb-5 flex items-center gap-2">
-            <span className="w-5 h-5 rounded-full bg-slate-800 text-white text-xs font-bold flex items-center justify-center">1</span>
-            Project Details
-          </h2>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="label">Client Name *</label>
-              <input className="input" placeholder="ABC Corporation"
-                value={meta.clientName} onChange={e => setMeta(m => ({ ...m, clientName: e.target.value }))} />
-            </div>
-            <div>
-              <label className="label">Project Name</label>
-              <input className="input" placeholder="Office Renovation"
-                value={meta.projectName} onChange={e => setMeta(m => ({ ...m, projectName: e.target.value }))} />
-            </div>
-            <div>
-              <label className="label">Client Email</label>
-              <input type="email" className="input" placeholder="client@example.com"
-                value={meta.clientEmail} onChange={e => setMeta(m => ({ ...m, clientEmail: e.target.value }))} />
-            </div>
-            <div>
-              <label className="label">Client Phone</label>
-              <input type="tel" className="input" placeholder="+91 98765 43210"
-                value={meta.clientPhone} onChange={e => setMeta(m => ({ ...m, clientPhone: e.target.value }))} />
-            </div>
-            <div>
-              <label className="label">Location</label>
-              <input className="input" placeholder="Mumbai"
-                value={meta.location} onChange={e => setMeta(m => ({ ...m, location: e.target.value }))} />
-            </div>
-            <div>
-              <label className="label">Quote Date</label>
-              <input type="date" className="input"
-                value={meta.date} onChange={e => setMeta(m => ({ ...m, date: e.target.value }))} />
-            </div>
-            <div>
-              <label className="label">Valid Until</label>
-              <input type="date" className="input"
-                value={meta.validUntil} onChange={e => setMeta(m => ({ ...m, validUntil: e.target.value }))} />
-            </div>
-          </div>
-        </div>
+      {/* §01 Title block */}
+      <section className="pt-9">
+        <SectionHead n="01" title="Title block" note="Client & project of record" />
 
-        {/* Pricing */}
-        <div className="card p-6">
-          <h2 className="font-semibold text-slate-800 mb-5 flex items-center gap-2">
-            <span className="w-5 h-5 rounded-full bg-slate-800 text-white text-xs font-bold flex items-center justify-center">2</span>
-            Pricing
-          </h2>
-          <div className="grid grid-cols-3 gap-3 mb-4">
-            {TIER_OPTIONS.map(t => (
-              <button
-                key={t.value} type="button"
-                onClick={() => setMeta(m => ({ ...m, priceTier: t.value }))}
-                className={`p-3 rounded-xl border text-left transition-all ${
-                  meta.priceTier === t.value
-                    ? 'border-slate-700 bg-slate-800'
-                    : 'border-slate-200 hover:border-slate-300'
-                }`}
-              >
-                <div className={`font-semibold text-sm ${meta.priceTier === t.value ? 'text-white' : 'text-slate-800'}`}>
-                  {t.label}
-                </div>
-                <div className={`text-xs mt-0.5 ${meta.priceTier === t.value ? 'text-slate-300' : 'text-slate-500'}`}>{t.desc}</div>
+        <div className="mb-6">
+          <label className="label">Issuing company <span style={{ color: 'var(--accent)' }}>*</span></label>
+          <div className="flex gap-2 flex-wrap">
+            {listCompanies().map(c => (
+              <button key={c.id} type="button" onClick={() => setMeta(m => ({ ...m, company: c.id }))}
+                className={`opt ${meta.company === c.id ? 'opt-on' : ''} min-w-[150px]`}>
+                <span className="block text-[13px] font-semibold">{c.shortName}</span>
+                <span className="block text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>{c.name}</span>
               </button>
             ))}
           </div>
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div>
-              <label className="label">Additional Markup (%)</label>
-              <input type="number" min="0" max="200" className="input"
-                value={meta.markupPercent}
-                onChange={e => setMeta(m => ({ ...m, markupPercent: parseFloat(e.target.value) || 0 }))} />
+          <p className="text-[12px] mt-2" style={{ color: 'var(--muted)' }}>Sets the name, address, GST and bank details printed on the PDF. Pricing and calculations are identical for both.</p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
+          <div><label className="label">Client name <span style={{ color: 'var(--accent)' }}>*</span></label>
+            <input className="input" placeholder="ABC Corporation" value={meta.clientName} onChange={e => setMeta(m => ({ ...m, clientName: e.target.value }))} /></div>
+          <div><label className="label">Project name</label>
+            <input className="input" placeholder="Office Renovation" value={meta.projectName} onChange={e => setMeta(m => ({ ...m, projectName: e.target.value }))} /></div>
+          <div><label className="label">Client email</label>
+            <input type="email" className="input" placeholder="client@example.com" value={meta.clientEmail} onChange={e => setMeta(m => ({ ...m, clientEmail: e.target.value }))} /></div>
+          <div><label className="label">Client phone</label>
+            <input type="tel" className="input" placeholder="+91 98765 43210" value={meta.clientPhone} onChange={e => setMeta(m => ({ ...m, clientPhone: e.target.value }))} /></div>
+          <div><label className="label">Location</label>
+            <input className="input" placeholder="Mumbai" value={meta.location} onChange={e => setMeta(m => ({ ...m, location: e.target.value }))} /></div>
+          <div className="grid grid-cols-2 gap-x-5">
+            <div><label className="label">Issued</label>
+              <input type="date" className="input fig" value={meta.date} onChange={e => setMeta(m => ({ ...m, date: e.target.value }))} /></div>
+            <div><label className="label">Valid until</label>
+              <input type="date" className="input fig" value={meta.validUntil} onChange={e => setMeta(m => ({ ...m, validUntil: e.target.value }))} /></div>
+          </div>
+        </div>
+      </section>
+
+      <div className="mt-9" style={{ borderTop: '1px solid var(--rule)' }} />
+
+      {/* §02 Terms */}
+      <section className="pt-9">
+        <SectionHead n="02" title="Commercial terms" note="Pricing basis & charges" />
+
+        <label className="label">Pricing tier</label>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+          {TIER_OPTIONS.map(t => (
+            <button key={t.value} type="button" onClick={() => setMeta(m => ({ ...m, priceTier: t.value }))}
+              className={`opt ${meta.priceTier === t.value ? 'opt-on' : ''}`}>
+              <div className="text-[13px] font-semibold">{t.label}</div>
+              <div className="text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>{t.desc}</div>
+            </button>
+          ))}
+        </div>
+
+        {meta.priceTier === 'manual' && (
+          <div className="p-4 rounded-[4px] mb-4 space-y-3 animate-fade-in"
+            style={{ background: 'var(--sheet)', border: '1px solid var(--rule-2)', boxShadow: 'inset 3px 0 0 var(--accent)' }}>
+            <p className="fig text-[10.5px] uppercase" style={{ color: 'var(--accent-ink)', letterSpacing: '0.08em' }}>Manual rates — price per unit</p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div><label className="label">Fabric ₹/sqm</label>
+                <input type="number" min="0" step="10" className="input fig" placeholder="1100" value={manualRates.fabricPerSqm || ''} onChange={e => setManualRates(r => ({ ...r, fabricPerSqm: parseFloat(e.target.value) || 0 }))} /></div>
+              <div><label className="label">LED ₹/mtr</label>
+                <input type="number" min="0" step="10" className="input fig" placeholder="350" value={manualRates.ledPerMtr || ''} onChange={e => setManualRates(r => ({ ...r, ledPerMtr: parseFloat(e.target.value) || 0 }))} /></div>
+              <div><label className="label">Gripper ₹/rmt</label>
+                <input type="number" min="0" step="5" className="input fig" placeholder="170" value={manualRates.gripperPerRmt || ''} onChange={e => setManualRates(r => ({ ...r, gripperPerRmt: parseFloat(e.target.value) || 0 }))} /></div>
             </div>
             <div>
-              <label className="label">Installation Rate (₹/sqft)</label>
-              <input type="number" min="0" className="input"
-                value={meta.installationRatePerSqft}
-                onChange={e => setMeta(m => ({ ...m, installationRatePerSqft: parseFloat(e.target.value) || 0 }))} />
-            </div>
-            <div>
-              <label className="label">Transport Cost (₹ flat)</label>
-              <input type="number" min="0" className="input"
-                value={meta.transportCost}
-                onChange={e => setMeta(m => ({ ...m, transportCost: parseFloat(e.target.value) || 0 }))} />
+              <label className="label">Drivers, controls, printing & fleece — tier</label>
+              <div className="flex gap-2">
+                {(['dealer', 'msp', 'specifiors'] as const).map(t => (
+                  <button key={t} type="button" onClick={() => setManualRates(r => ({ ...r, otherItemsTier: t }))}
+                    className={`opt ${manualRates.otherItemsTier === t ? 'opt-on' : ''} px-3 py-1.5 text-[12px] font-semibold`}>
+                    {t.charAt(0).toUpperCase() + t.slice(1)}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
-          <div className="flex items-center gap-6">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <div
-                onClick={() => setMeta(m => ({ ...m, includeGst: !m.includeGst }))}
-                className={`w-10 h-6 rounded-full transition-colors relative cursor-pointer ${
-                  meta.includeGst ? 'bg-slate-800' : 'bg-slate-200'
-                }`}
-              >
-                <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-transform ${
-                  meta.includeGst ? 'translate-x-5' : 'translate-x-1'
-                }`} />
-              </div>
-              <span className="text-sm text-slate-700 font-medium">Include GST (18%)</span>
-            </label>
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-slate-500">Display:</span>
+        )}
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-5 gap-y-4 mb-5">
+          <div><label className="label">Markup %</label>
+            <input type="number" min="0" max="200" className="input fig" value={meta.markupPercent} onChange={e => setMeta(m => ({ ...m, markupPercent: parseFloat(e.target.value) || 0 }))} /></div>
+          <div><label className="label">Install ₹/sqft</label>
+            <input type="number" min="0" className="input fig" value={meta.installationRatePerSqft} onChange={e => setMeta(m => ({ ...m, installationRatePerSqft: parseFloat(e.target.value) || 0 }))} /></div>
+          <div><label className="label">Transport ₹</label>
+            <input type="number" min="0" className="input fig" value={meta.transportCost} onChange={e => setMeta(m => ({ ...m, transportCost: parseFloat(e.target.value) || 0 }))} /></div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
+          <label className="flex items-center gap-2.5 cursor-pointer">
+            <div onClick={() => setMeta(m => ({ ...m, includeGst: !m.includeGst }))}
+              className="w-9 h-5 rounded-full transition-colors relative cursor-pointer"
+              style={{ background: meta.includeGst ? 'var(--ink)' : 'var(--rule-2)' }}>
+              <div className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform"
+                style={{ transform: meta.includeGst ? 'translateX(18px)' : 'translateX(2px)' }} />
+            </div>
+            <span className="text-[13px] font-medium" style={{ color: 'var(--ink-2)' }}>Include GST (18%)</span>
+          </label>
+          <div className="flex items-center gap-2">
+            <span className="label mb-0">Display</span>
+            <div className="flex" style={{ borderBottom: '1px solid var(--rule)' }}>
               {(['total', 'per-sqft'] as QuoteDisplayMode[]).map(m => (
-                <button key={m} type="button"
-                  onClick={() => setMeta(mm => ({ ...mm, displayMode: m }))}
-                  className={`px-3 py-1 rounded-lg border text-xs font-semibold transition-all ${
-                    meta.displayMode === m
-                      ? 'border-slate-700 bg-slate-800 text-white'
-                      : 'border-slate-200 text-slate-600 hover:border-slate-300'
-                  }`}
-                >
-                  {m === 'total' ? 'Total Price' : 'Per Sqft'}
-                </button>
+                <button key={m} type="button" onClick={() => setMeta(mm => ({ ...mm, displayMode: m }))}
+                  className={`seg ${meta.displayMode === m ? 'seg-on' : ''}`}>{m === 'total' ? 'Total' : 'Per sqft'}</button>
               ))}
             </div>
           </div>
         </div>
+      </section>
 
-        {/* Ceiling items */}
-        <div>
-          <h2 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
-            <span className="w-5 h-5 rounded-full bg-slate-800 text-white text-xs font-bold flex items-center justify-center">3</span>
-            Ceiling Items
-          </h2>
-          <div className="space-y-4">
-            {items.map((item, idx) => (
-              <CeilingItemForm
-                key={item.id}
-                item={item}
-                index={idx}
-                priceTier={meta.priceTier}
-                onChange={updated => updateItem(idx, updated)}
-                onRemove={() => removeItem(idx)}
-              />
-            ))}
+      <div className="mt-9" style={{ borderTop: '1px solid var(--rule)' }} />
+
+      {/* §03 Schedule of items */}
+      <section className="pt-9">
+        <SectionHead n="03" title="Schedule of items" note={`${items.length} ceiling${items.length !== 1 ? 's' : ''}`} />
+        <div className="space-y-4">
+          {items.map((item, idx) => (
+            <CeilingItemForm key={item.id} item={item} index={idx}
+              priceTier={meta.priceTier} installRatePerSqft={meta.installationRatePerSqft}
+              manualRates={meta.priceTier === 'manual' ? manualRates : undefined}
+              onChange={updated => updateItem(idx, updated)} onRemove={() => removeItem(idx)} />
+          ))}
+        </div>
+        <button type="button" onClick={addItem}
+          className="mt-4 w-full py-3 rounded-[4px] text-[13px] font-medium flex items-center justify-center gap-2 transition-colors"
+          style={{ border: '1px dashed var(--rule-2)', color: 'var(--muted)' }}>
+          <Plus size={15} /> Add ceiling item
+        </button>
+      </section>
+
+      <div className="mt-9" style={{ borderTop: '1px solid var(--rule)' }} />
+
+      {/* Notes */}
+      <section className="pt-9">
+        <label className="label">Notes / terms</label>
+        <textarea className="input resize-none h-24" placeholder="Any special notes, terms, or conditions…"
+          value={meta.notes} onChange={e => setMeta(m => ({ ...m, notes: e.target.value }))} />
+
+        <details className="mt-6 group">
+          <summary className="fig text-[10.5px] uppercase cursor-pointer list-none flex items-center gap-2"
+            style={{ color: 'var(--faint)', letterSpacing: '0.1em' }}>
+            <span>Calculation basis</span>
+            <span style={{ color: 'var(--rule-2)' }}>▸</span>
+          </summary>
+          <ul className="text-[12px] space-y-1 mt-3" style={{ color: 'var(--muted)' }}>
+            <li>· Fabric cut length and gripper perimeter use exact dimensions (no rounding)</li>
+            <li>· Joint option available for all rectangle sizes</li>
+            <li>· LED strips counted across shorter dim at chosen gap (default 125 mm), length rounded up to nearest 1 m module</li>
+            <li>· Circle: LED count = 80% of equivalent bounding square</li>
+            <li>· DALI tunable: DT8 150 W max 10 modules + DA4m at 1 per 3 drivers</li>
+            <li>· Standard tunable/dimmable: 200/450/600 W drivers + EV2 + V2 + RT2</li>
+            <li>· Single colour: 80% driver capacity + EV1 + V1 + RT1</li>
+          </ul>
+        </details>
+      </section>
+
+      {/* Persistent title-block bar */}
+      <div className="fixed bottom-0 left-0 right-0 z-40"
+        style={{ background: 'rgba(244,240,231,0.92)', backdropFilter: 'blur(10px)', borderTop: '1px solid var(--rule-2)' }}>
+        {/* Breakdown popover */}
+        {showBreak && preview && (
+          <div className="max-w-3xl mx-auto px-4 sm:px-0">
+            <div className="mb-0 animate-rise rounded-t-[4px] px-4 py-3"
+              style={{ background: 'var(--sheet)', borderTop: '1px solid var(--rule-2)', borderLeft: '1px solid var(--rule-2)', borderRight: '1px solid var(--rule-2)', maxHeight: 260, overflowY: 'auto' }}>
+              {preview.itemBreakdowns.map((bd, idx) => (
+                <div key={bd.item.id} className="flex justify-between items-center text-[13px] py-1.5" style={{ borderBottom: '1px solid var(--rule)' }}>
+                  <span className="truncate max-w-[60%]" style={{ color: 'var(--ink-2)' }}>{bd.item.name || `Item ${idx + 1}`}</span>
+                  <span className="fig font-medium" style={{ color: 'var(--ink)' }}>{fmtINR(bd.itemTotal)}</span>
+                </div>
+              ))}
+              {meta.transportCost > 0 && (
+                <div className="flex justify-between text-[13px] py-1.5" style={{ color: 'var(--muted)' }}><span>Transport</span><span className="fig">{fmtINR(meta.transportCost)}</span></div>
+              )}
+              {preview.gstAmount > 0 && (
+                <div className="flex justify-between text-[13px] py-1.5" style={{ color: 'var(--muted)' }}><span>GST 18%</span><span className="fig">{fmtINR(preview.gstAmount)}</span></div>
+              )}
+            </div>
           </div>
-          <button
-            type="button"
-            onClick={addItem}
-            className="mt-4 w-full py-3 border-2 border-dashed border-slate-200 rounded-xl text-slate-500 text-sm font-medium hover:border-slate-400 hover:text-slate-700 hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
-          >
-            <Plus size={16} /> Add Ceiling Item
+        )}
+
+        <div className="max-w-3xl mx-auto px-4 sm:px-0 py-3 flex items-center gap-4">
+          {/* Running total */}
+          <button onClick={() => setShowBreak(v => !v)} disabled={!preview}
+            className="flex items-center gap-3 text-left disabled:opacity-50">
+            <div>
+              <div className="fig text-[9.5px] uppercase flex items-center gap-1" style={{ color: 'var(--faint)', letterSpacing: '0.12em' }}>
+                Total
+                {preview && <ChevronUp size={11} className="transition-transform" style={{ transform: showBreak ? 'none' : 'rotate(180deg)', color: 'var(--rule-2)' }} />}
+              </div>
+              <div className="fig text-[22px] font-semibold leading-none mt-0.5" style={{ color: 'var(--ink)' }}>
+                {preview ? fmtINR(preview.grandTotal) : '—'}
+              </div>
+            </div>
           </button>
-        </div>
 
-        {/* Notes */}
-        <div className="card p-6">
-          <label className="label">Quote Notes / Terms</label>
-          <textarea className="input resize-none h-24"
-            placeholder="Any special notes, terms, or conditions…"
-            value={meta.notes}
-            onChange={e => setMeta(m => ({ ...m, notes: e.target.value }))} />
-        </div>
-      </div>
-
-      {/* Sidebar */}
-      <div className="lg:col-span-1">
-        <div className="sticky top-24 space-y-4">
-          <div className="card p-5">
-            <h3 className="font-semibold text-slate-800 mb-4">Quote Summary</h3>
-            {preview ? (
-              <>
-                <div className="space-y-2 mb-4">
-                  {preview.itemBreakdowns.map((bd, idx) => (
-                    <div key={bd.item.id} className="flex justify-between items-center text-sm py-1.5 border-b border-slate-100 last:border-0">
-                      <span className="text-slate-600 truncate max-w-[60%]">
-                        {bd.item.name || `Item ${idx + 1}`}
-                      </span>
-                      <span className="font-semibold text-slate-800">{fmtINR(bd.itemTotal)}</span>
-                    </div>
-                  ))}
-                </div>
-                {meta.transportCost > 0 && (
-                  <div className="flex justify-between text-sm py-1 text-slate-500">
-                    <span>Transport</span>
-                    <span>{fmtINR(meta.transportCost)}</span>
-                  </div>
-                )}
-                {preview.gstAmount > 0 && (
-                  <div className="flex justify-between text-sm py-1 text-slate-500">
-                    <span>GST 18%</span>
-                    <span>{fmtINR(preview.gstAmount)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between items-center pt-3 border-t border-slate-200 mt-2">
-                  <span className="font-bold text-slate-900">Total</span>
-                  <span className="text-xl font-bold text-slate-900">{fmtINR(preview.grandTotal)}</span>
-                </div>
-                {meta.displayMode === 'per-sqft' && preview.totalSqft > 0 && (
-                  <p className="text-xs text-slate-500 mt-1 text-right">
-                    {preview.totalSqft.toFixed(1)} sqft · ₹{Math.round(preview.pricePerSqft)}/sqft
-                  </p>
-                )}
-                <p className="text-xs text-slate-400 mt-2">
-                  {meta.markupPercent > 0 ? `+${meta.markupPercent}% markup · ` : ''}
-                  {meta.includeGst ? 'Incl. GST 18%' : 'Excl. GST'}
-                </p>
-              </>
-            ) : (
-              <p className="text-sm text-slate-400">Add items to see summary</p>
+          <div className="hidden sm:block fig text-[10.5px] leading-relaxed" style={{ color: 'var(--faint)' }}>
+            {meta.markupPercent > 0 ? `+${meta.markupPercent}% markup · ` : ''}{meta.includeGst ? 'incl. GST' : 'excl. GST'}
+            {meta.displayMode === 'per-sqft' && preview && preview.totalSqft > 0 && (
+              <><br />{preview.totalSqft.toFixed(1)} sqft · ₹{Math.round(preview.pricePerSqft)}/sqft</>
             )}
           </div>
 
-          <button
-            onClick={handleSave}
-            disabled={saving || saved}
-            className={`w-full btn text-sm py-3 font-semibold justify-center ${
-              saved ? 'bg-emerald-500 text-white' : 'btn-primary'
-            }`}
-          >
-            {saving ? (
-              <><Loader2 size={16} className="animate-spin" /> Saving…</>
-            ) : saved ? (
-              <><CheckCircle size={16} /> Saved! Redirecting…</>
-            ) : (
-              <><Save size={16} /> {mode === 'edit' ? 'Update Quote' : 'Save Quote'}</>
-            )}
+          <div className="flex-1" />
+
+          <button onClick={() => saveQuote('internal')} disabled={savingInternal || saving} className="btn-secondary hidden sm:inline-flex">
+            {savingInternal ? <><Loader2 size={15} className="animate-spin" /> Saving…</> : 'Internal review'}
           </button>
-
-          {mode === 'edit' && (
-            <a href="/" className="btn-secondary w-full justify-center text-sm">
-              Cancel
-            </a>
-          )}
-
-          <div className="card p-4 bg-slate-50 border-slate-200">
-            <p className="text-xs font-semibold text-slate-700 mb-2">Smart Calculations</p>
-            <ul className="text-xs text-slate-500 space-y-1">
-              <li>• Roll orientation chosen for minimum wastage</li>
-              <li>• Joint detection when both dims &gt; 5000mm</li>
-              <li>• LED strips: 1 per 6\" of cove depth</li>
-              <li>• Drivers auto-selected with 20% headroom</li>
-              <li>• Circle quoted as diameter × diameter square</li>
-            </ul>
-          </div>
+          {mode === 'edit' && <a href="/" className="btn-ghost hidden sm:inline-flex">Cancel</a>}
+          <button onClick={handleSave} disabled={saving} className="btn-primary btn-lg">
+            {saving ? <><Loader2 size={15} className="animate-spin" /> Saving…</> : <><Save size={15} /> {mode === 'edit' ? 'Update quote' : 'Save quote'}</>}
+          </button>
         </div>
       </div>
     </div>

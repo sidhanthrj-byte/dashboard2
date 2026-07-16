@@ -1,0 +1,116 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { GitBranch, ArrowLeft, Plus } from 'lucide-react'
+import type { Quote } from '@/lib/types'
+import { fmtINR, calculateQuote } from '@/lib/calculations'
+
+export default function RevisionTrailPage({ params }: { params: { id: string } }) {
+  const [revs, setRevs] = useState<Quote[]>([])
+  const [loading, setLoading] = useState(true)
+  const [creating, setCreating] = useState(false)
+  const [error, setError] = useState('')
+
+  function load() {
+    fetch(`/api/quotes/${params.id}/revisions`)
+      .then(async r => {
+        if (!r.ok) { setError(r.status === 403 ? 'You don’t have access to this quote.' : 'Not found'); return [] }
+        return r.json()
+      })
+      .then(d => { setRevs(Array.isArray(d) ? d : []); setLoading(false) })
+      .catch(() => setLoading(false))
+  }
+  useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function createRevision() {
+    setCreating(true)
+    const res = await fetch(`/api/quotes/${params.id}/revisions`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
+    })
+    setCreating(false)
+    if (!res.ok) { alert('Could not create revision'); return }
+    const created = await res.json()
+    window.location.href = `/quotes/${created.id}/edit`
+  }
+
+  function total(q: Quote): number {
+    try { return calculateQuote(q).grandTotal } catch { return Number(q.grandTotal ?? 0) }
+  }
+
+  const original = revs[0]
+
+  return (
+    <div className="animate-fade-in max-w-3xl mx-auto">
+      <header className="pt-8 sm:pt-12 pb-6">
+        <a href="/quotes" className="inline-flex items-center gap-1.5 text-[12px] mb-4" style={{ color: 'var(--muted)' }}>
+          <ArrowLeft size={13} /> Back to quotes
+        </a>
+        <div className="eyebrow mb-2.5">Revision trail</div>
+        <h1 className="font-display text-[30px] font-semibold leading-none tracking-tight" style={{ color: 'var(--ink)' }}>
+          {original ? original.clientName : 'Quote history'}
+        </h1>
+        <p className="text-[14px] mt-3" style={{ color: 'var(--muted)' }}>
+          {loading ? 'Loading…' : `${revs.length} version${revs.length !== 1 ? 's' : ''} in this trail`}
+        </p>
+      </header>
+
+      {error && <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</div>}
+
+      {!loading && !error && (
+        <div className="flex items-center justify-end mb-4">
+          <button onClick={createRevision} disabled={creating} className="btn-primary">
+            <Plus size={15} /> {creating ? 'Creating…' : 'New revision'}
+          </button>
+        </div>
+      )}
+
+      {/* Trail: Main → R1 → R2 … */}
+      <div className="relative">
+        {revs.map((q, i) => {
+          const rev = Number(q.revision ?? 0)
+          const isLast = i === revs.length - 1
+          return (
+            <div key={q.id} className="flex gap-4">
+              {/* Rail */}
+              <div className="flex flex-col items-center">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
+                  style={{ border: `1.5px solid ${rev === 0 ? 'var(--ink)' : 'var(--accent)'}` }}>
+                  {rev === 0 ? <span className="fig text-[11px]" style={{ color: 'var(--ink)' }}>M</span>
+                    : <GitBranch size={14} style={{ color: 'var(--accent)' }} />}
+                </div>
+                {!isLast && <div className="w-px flex-1 my-1" style={{ background: 'var(--rule-2)' }} />}
+              </div>
+
+              {/* Card */}
+              <div className="flex-1 pb-6">
+                <div className="card p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="fig text-[12px]" style={{ color: 'var(--ink-3)' }}>{q.quoteNumber}</div>
+                      <div className="font-display text-[15px] font-semibold mt-0.5" style={{ color: 'var(--ink)' }}>
+                        {rev === 0 ? 'Original quote' : `Revision ${rev}`}
+                      </div>
+                    </div>
+                    <div className="fig text-[15px] font-medium" style={{ color: 'var(--ink)' }}>{fmtINR(total(q))}</div>
+                  </div>
+                  <div className="flex items-center gap-3 mt-3 text-[12px]" style={{ color: 'var(--muted)' }}>
+                    <span className="fig">{new Date(q.updatedAt ?? q.createdAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+                    {q.revisedBy && <><span style={{ color: 'var(--rule-2)' }}>·</span><span>by {q.revisedBy}</span></>}
+                    {rev === 0 && q.ownerEmail && <><span style={{ color: 'var(--rule-2)' }}>·</span><span>by {q.ownerEmail}</span></>}
+                    <span style={{ color: 'var(--rule-2)' }}>·</span>
+                    <span className="fig">{q.items?.length ?? 0} items</span>
+                  </div>
+                  <div className="flex items-center gap-1 mt-3">
+                    <a href={`/quotes/${q.id}/team`} className="btn-ghost btn-sm">Open</a>
+                    <a href={`/quotes/${q.id}/edit`} className="btn-ghost btn-sm">Edit</a>
+                    <a href={`/quotes/${q.id}/client`} className="btn-ghost btn-sm">PDF</a>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
