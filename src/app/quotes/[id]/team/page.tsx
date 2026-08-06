@@ -177,6 +177,8 @@ function ItemBreakdownCard({ bd, index, installRate }: { bd: ItemBreakdown; inde
   const item = bd.item
   const qty = item.quantity
   const hasMultiple = qty > 1
+  // A Manual (Custom) row carries no geometry — skip the fabric/dimension detail.
+  const isCustom = bd.fabricDetail.panels.length === 0 && !bd.ledDetail
 
   return (
     <div className="card mb-4 overflow-hidden">
@@ -190,11 +192,17 @@ function ItemBreakdownCard({ bd, index, installRate }: { bd: ItemBreakdown; inde
             {hasMultiple && <span className="badge bg-slate-100 text-slate-700">×{qty}</span>}
           </div>
           <div className="text-xs text-slate-500 flex flex-wrap gap-3 ml-7">
-            <span>{item.shape.charAt(0).toUpperCase() + item.shape.slice(1)} · {formatDims(item)}</span>
-            <span>{round2(bd.areaM2).toFixed(2)} sqm · Perimeter {round2(bd.perimeterM).toFixed(2)} m</span>
-            <span>{item.fabricType}</span>
-            {item.lightType !== 'none' && <span>Lights: {item.lightType.replace(/_/g, ' ')}</span>}
-            {bd.fabricDetail.hasJoint && <span className="font-medium text-slate-700">Joint: {bd.fabricDetail.jointPosition}</span>}
+            {isCustom ? (
+              <span>Custom line · {qty} × {fmtINR(round2(bd.itemTotal / (qty || 1)))}</span>
+            ) : (
+              <>
+                <span>{item.shape.charAt(0).toUpperCase() + item.shape.slice(1)} · {formatDims(item)}</span>
+                <span>{round2(bd.areaM2).toFixed(2)} sqm · Perimeter {round2(bd.perimeterM).toFixed(2)} m</span>
+                <span>{item.fabricType}</span>
+                {item.lightType !== 'none' && <span>Lights: {item.lightType.replace(/_/g, ' ')}</span>}
+                {bd.fabricDetail.hasJoint && <span className="font-medium text-slate-700">Joint: {bd.fabricDetail.jointPosition}</span>}
+              </>
+            )}
           </div>
         </div>
         <div className="text-right">
@@ -206,6 +214,7 @@ function ItemBreakdownCard({ bd, index, installRate }: { bd: ItemBreakdown; inde
       </div>
 
       {/* Fabric detail */}
+      {!isCustom && (
       <div className="px-6 py-3 bg-blue-50 border-b border-blue-100 text-xs text-blue-700 space-y-1">
         {bd.fabricDetail.panels.map((panel, i) => (
           <div key={i} className="flex flex-wrap gap-4">
@@ -222,6 +231,7 @@ function ItemBreakdownCard({ bd, index, installRate }: { bd: ItemBreakdown; inde
           <span>Total waste: {bd.fabricDetail.totalWastageArea.toFixed(2)} sqm</span>
         </div>
       </div>
+      )}
 
       {/* LED detail */}
       {bd.ledDetail && (

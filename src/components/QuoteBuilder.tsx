@@ -5,7 +5,7 @@ import { Plus, Save, Loader2, BookUser, Trash2 } from 'lucide-react'
 import { v4 as uuid } from 'uuid'
 import { useRouter } from 'next/navigation'
 import CeilingItemForm, { defaultItem } from './CeilingItemForm'
-import type { Quote, CeilingItem, PriceTier, QuoteDisplayMode, ManualRates } from '@/lib/types'
+import type { Quote, CeilingItem, PriceTier, QuoteDisplayMode, ManualRates, CustomLine } from '@/lib/types'
 import { calculateQuote, fmtINR } from '@/lib/calculations'
 import { listClients, saveClient, deleteClient, type SavedClient } from '@/lib/clients'
 import { listCompanies, DEFAULT_COMPANY } from '@/lib/companies'
@@ -48,6 +48,27 @@ export default function QuoteBuilder({ initial, mode }: Props) {
   const [items, setItems] = useState<CeilingItem[]>(
     initial?.items?.length ? initial.items : [defaultItem(uuid())]
   )
+
+  // Feature 4 — free-form rows for the Manual (Custom) tab.
+  const [customLines, setCustomLines] = useState<CustomLine[]>(
+    initial?.customLines?.length ? initial.customLines : [{ id: uuid(), description: '', qty: 1, cost: 0, sellingPrice: 0 }]
+  )
+  const isCustom = meta.priceTier === 'manual_custom'
+  const CUSTOM_ITEM_SUGGESTIONS = [
+    'Stretch Ceiling Fabric', 'Printed Fabric', 'Acoustic Fabric', 'Translucent Fabric',
+    'LED Strip', 'LED Driver', 'DALI Controller', 'Gripper Track', 'Profile',
+    'Installation', 'Transport', 'Fabrication', 'Site Survey', 'Miscellaneous',
+  ]
+  function updateCustomLine(id: string, patch: Partial<CustomLine>) {
+    setCustomLines(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l))
+  }
+  function addCustomLine() {
+    setCustomLines(prev => [...prev, { id: uuid(), description: '', qty: 1, cost: 0, sellingPrice: 0 }])
+  }
+  function removeCustomLine(id: string) {
+    setCustomLines(prev => prev.filter(l => l.id !== id))
+  }
+  const customTotal = customLines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.sellingPrice) || 0), 0)
 
   const [preview, setPreview] = useState<ReturnType<typeof calculateQuote> | null>(null)
   const [clients, setClients] = useState<SavedClient[]>([])
@@ -99,12 +120,13 @@ export default function QuoteBuilder({ initial, mode }: Props) {
         ...meta,
         items,
         manualRates: meta.priceTier === 'manual' ? manualRates : undefined,
+        customLines: meta.priceTier === 'manual_custom' ? customLines : undefined,
       }
       setPreview(calculateQuote(fakeQuote))
     } catch {
       setPreview(null)
     }
-  }, [meta, items, manualRates])
+  }, [meta, items, manualRates, customLines])
 
   useEffect(() => { updatePreview() }, [updatePreview])
 
@@ -122,14 +144,20 @@ export default function QuoteBuilder({ initial, mode }: Props) {
 
   async function saveQuote(redirectTo: 'team' | 'internal' = 'team') {
     if (!meta.clientName.trim()) { alert('Please enter a client name.'); return }
-    if (items.length === 0) { alert('Please add at least one ceiling item.'); return }
+    if (isCustom) {
+      if (!customLines.some(l => l.description.trim())) { alert('Please add at least one custom line.'); return }
+    } else if (items.length === 0) { alert('Please add at least one ceiling item.'); return }
 
     const isInternal = redirectTo === 'internal'
     if (isInternal) setSavingInternal(true)
     else setSaving(true)
 
     try {
-      const payload = { ...meta, items, manualRates: meta.priceTier === 'manual' ? manualRates : undefined }
+      const payload = {
+        ...meta, items,
+        manualRates: meta.priceTier === 'manual' ? manualRates : undefined,
+        customLines: isCustom ? customLines : undefined,
+      }
       const url = mode === 'edit' ? `/api/quotes/${initial!.id}` : '/api/quotes'
       const method = mode === 'edit' ? 'PUT' : 'POST'
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
@@ -165,6 +193,7 @@ export default function QuoteBuilder({ initial, mode }: Props) {
     { value: 'msp', label: 'MSP', desc: 'Market selling price' },
     { value: 'specifiors', label: 'Specifiors', desc: 'Architects / Specifiers' },
     { value: 'manual', label: 'Manual', desc: 'Set custom rates' },
+    { value: 'manual_custom', label: 'Manual (Custom)', desc: 'Free-form rows' },
   ]
 
   return (
@@ -280,7 +309,7 @@ export default function QuoteBuilder({ initial, mode }: Props) {
             <span className="w-5 h-5 rounded-full bg-slate-800 text-white text-xs font-bold flex items-center justify-center">2</span>
             Pricing
           </h2>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
             {TIER_OPTIONS.map(t => (
               <button
                 key={t.value} type="button"
@@ -350,18 +379,22 @@ export default function QuoteBuilder({ initial, mode }: Props) {
             </div>
           )}
           <div className="grid grid-cols-2 gap-4 mb-4">
+            {!isCustom && (
             <div>
               <label className="label">Additional Markup (%)</label>
               <input type="number" min="0" max="200" className="input"
                 value={meta.markupPercent}
                 onChange={e => setMeta(m => ({ ...m, markupPercent: parseFloat(e.target.value) || 0 }))} />
             </div>
+            )}
+            {!isCustom && (
             <div>
               <label className="label">Installation Rate (₹/sqft)</label>
               <input type="number" min="0" className="input"
                 value={meta.installationRatePerSqft}
                 onChange={e => setMeta(m => ({ ...m, installationRatePerSqft: parseFloat(e.target.value) || 0 }))} />
             </div>
+            )}
             <div>
               <label className="label">Transport Cost (₹ flat)</label>
               <input type="number" min="0" className="input"
@@ -401,7 +434,60 @@ export default function QuoteBuilder({ initial, mode }: Props) {
           </div>
         </div>
 
-        {/* Ceiling items */}
+        {/* Section 3 — Custom rows (Manual Custom) or Ceiling items */}
+        {isCustom ? (
+          <div>
+            <h2 className="font-semibold text-slate-800 mb-2 flex items-center gap-2">
+              <span className="w-5 h-5 rounded-full bg-slate-800 text-white text-xs font-bold flex items-center justify-center">3</span>
+              Custom Quotation
+            </h2>
+            <p className="text-xs text-slate-500 mb-4">
+              Free-form — every value below is used exactly as entered. No automatic calculations or pricing are applied.
+            </p>
+            <datalist id="custom-item-suggestions">
+              {CUSTOM_ITEM_SUGGESTIONS.map(s => <option key={s} value={s} />)}
+            </datalist>
+            <div className="hidden sm:grid gap-2 px-1 pb-2 mb-1 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wide"
+              style={{ gridTemplateColumns: '1fr 70px 100px 100px 100px 32px' }}>
+              <div>Item</div>
+              <div className="text-right">Qty</div>
+              <div className="text-right">Cost ₹</div>
+              <div className="text-right">Selling ₹</div>
+              <div className="text-right">Amount</div>
+              <div />
+            </div>
+            <div className="space-y-2">
+              {customLines.map((l) => {
+                const amount = (Number(l.qty) || 0) * (Number(l.sellingPrice) || 0)
+                return (
+                  <div key={l.id} className="grid gap-2 items-center" style={{ gridTemplateColumns: '1fr 70px 100px 100px 100px 32px' }}>
+                    <input list="custom-item-suggestions" className="input" placeholder="Select or type item"
+                      value={l.description} onChange={e => updateCustomLine(l.id, { description: e.target.value })} />
+                    <input type="number" min="0" step="1" className="input text-right" placeholder="1"
+                      value={l.qty || ''} onChange={e => updateCustomLine(l.id, { qty: parseFloat(e.target.value) || 0 })} />
+                    <input type="number" min="0" step="1" className="input text-right" placeholder="0"
+                      value={l.cost || ''} onChange={e => updateCustomLine(l.id, { cost: parseFloat(e.target.value) || 0 })} />
+                    <input type="number" min="0" step="1" className="input text-right" placeholder="0"
+                      value={l.sellingPrice || ''} onChange={e => updateCustomLine(l.id, { sellingPrice: parseFloat(e.target.value) || 0 })} />
+                    <div className="text-sm text-right font-medium text-slate-800">{fmtINR(amount)}</div>
+                    <button type="button" onClick={() => removeCustomLine(l.id)} title="Remove row"
+                      disabled={customLines.length === 1}
+                      className="text-rose-500 hover:text-rose-700 disabled:opacity-30 flex items-center justify-center">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+            <button type="button" onClick={addCustomLine}
+              className="mt-4 w-full py-3 border-2 border-dashed border-slate-200 rounded-xl text-slate-500 text-sm font-medium hover:border-slate-400 hover:text-slate-700 hover:bg-slate-50 transition-all flex items-center justify-center gap-2">
+              <Plus size={16} /> Add Row
+            </button>
+            <div className="flex justify-end mt-3 text-sm text-slate-500">
+              Lines total: <span className="ml-1 font-semibold text-slate-800">{fmtINR(customTotal)}</span>
+            </div>
+          </div>
+        ) : (
         <div>
           <h2 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
             <span className="w-5 h-5 rounded-full bg-slate-800 text-white text-xs font-bold flex items-center justify-center">3</span>
@@ -429,6 +515,7 @@ export default function QuoteBuilder({ initial, mode }: Props) {
             <Plus size={16} /> Add Ceiling Item
           </button>
         </div>
+        )}
 
         {/* Notes */}
         <div className="card p-6">

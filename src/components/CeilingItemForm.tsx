@@ -12,7 +12,7 @@ const FABRIC_OPTIONS = Object.keys(FABRIC)
 const LIGHT_OPTIONS: { value: LightType; label: string; note?: string }[] = [
   { value: 'none', label: 'No Lighting' },
   { value: 'single_color', label: 'Single Colour', note: 'Fixed white, non-dimmable' },
-  { value: 'single_color_dimmable', label: 'Single Colour Dimmable', note: 'DALI 2 driver' },
+  { value: 'single_color_dimmable', label: 'Single Colour Dimmable', note: 'DALI-2 or non-DALI' },
   { value: 'tunable', label: 'Tunable White', note: 'Variable warm↔cool' },
   { value: 'tunable_dali', label: 'Tunable (DALI at site)', note: 'DT8 + DA4m on-site' },
   { value: 'rgb', label: 'RGB', note: 'Color changing' },
@@ -491,7 +491,53 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
                   <p className="text-xs text-slate-500 mt-1">Max 10 modules per driver · DA4m at 1 per 3 DT8</p>
                 </div>
               )}
-              {(item.lightType === 'single_color' || item.lightType === 'tunable') && (
+              {/* Feature 2: Single Colour Dimmable — DALI vs Without DALI */}
+              {item.lightType === 'single_color_dimmable' && (
+                <div>
+                  <label className="label">Dimmable Driver System</label>
+                  <div className="flex gap-2 flex-wrap">
+                    {([[false, 'DALI-2 (DT2 + DA4m)'], [true, 'Without DALI (EV1 + V1 + RT1)']] as const).map(([val, label]) => (
+                      <button key={String(val)} type="button"
+                        onClick={() => onChange({ ...item, dimmableWithoutDali: val, driverOverrides: {} })}
+                        className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all ${
+                          !!item.dimmableWithoutDali === val
+                            ? 'border-[color:var(--ink)] bg-white text-[color:var(--ink)] shadow-[inset_3px_0_0_var(--accent)]'
+                            : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                        }`}
+                      >{label}</button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {item.dimmableWithoutDali
+                      ? 'Without DALI: standard drivers · Power Repeaters = drivers · 1 Controller per 3 repeaters · 1 Remote.'
+                      : 'DALI-2: DT2 200W driver (max 13 modules) + DA4m (1 per 3 drivers). Existing behaviour.'}
+                  </p>
+                </div>
+              )}
+              {/* Feature 3: RGB/RGBW — Analog vs DALI system */}
+              {(item.lightType === 'rgb' || item.lightType === 'rgbw') && (
+                <div>
+                  <label className="label">Driver System</label>
+                  <div className="flex gap-2 flex-wrap">
+                    {([[false, 'Analog (V2 + Repeater + Remote)'], [true, 'DALI (DA4M/DA5M per driver)']] as const).map(([val, label]) => (
+                      <button key={String(val)} type="button"
+                        onClick={() => onChange({ ...item, rgbDali: val, driverOverrides: {} })}
+                        className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all ${
+                          !!item.rgbDali === val
+                            ? 'border-[color:var(--ink)] bg-white text-[color:var(--ink)] shadow-[inset_3px_0_0_var(--accent)]'
+                            : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                        }`}
+                      >{label}</button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {item.rgbDali
+                      ? `DALI: one ${item.lightType === 'rgbw' ? 'DA5M' : 'DA4M'} controller per driver · no power repeater or remote.`
+                      : 'Analog: standard drivers + V2 Controller + remote (existing system).'}
+                  </p>
+                </div>
+              )}
+              {(item.lightType === 'single_color' || item.lightType === 'tunable' || (item.lightType === 'single_color_dimmable' && item.dimmableWithoutDali)) && (
                 <div>
                   <label className="label">Driver Size</label>
                   <div className="flex gap-2 flex-wrap">
@@ -537,6 +583,25 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
                   {(item.lightingConfig ?? 'non_looped') === 'looped'
                     ? 'Looped: all pieces run as one continuous system — drivers sized once from combined wattage (usually fewer drivers).'
                     : 'Non-Looped: each ceiling is an independent circuit — drivers calculated per piece × quantity.'}
+                </p>
+              </div>
+              {/* Feature 1: Item Looping — loop this item together with other items */}
+              <div>
+                <label className="label">Item Loop Group</label>
+                <div className="flex gap-2 flex-wrap">
+                  {([[0, 'None'], [1, 'Group 1'], [2, 'Group 2'], [3, 'Group 3']] as const).map(([val, label]) => (
+                    <button key={val} type="button"
+                      onClick={() => onChange({ ...item, loopGroup: val || undefined, driverOverrides: {} })}
+                      className={`px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all ${
+                        (item.loopGroup ?? 0) === val
+                          ? 'border-[color:var(--ink)] bg-white text-[color:var(--ink)] shadow-[inset_3px_0_0_var(--accent)]'
+                          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                      }`}
+                    >{label}</button>
+                  ))}
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  Items placed in the same group are looped together — their LED wattage is combined and drivers are sized once for the whole group. Set the same group on the items you want to loop (e.g. Item 1 &amp; Item 4).
                 </p>
               </div>
               {/* 12-dot module option for single colour */}

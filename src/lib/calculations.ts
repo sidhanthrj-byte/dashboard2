@@ -14,6 +14,27 @@ import {
 const FT = 0.3048
 const MM = 0.001
 
+// --- Manual (Custom) helpers (Feature 4) -----------------------------------
+// A synthetic, inert CeilingItem used to carry a free-form custom row through
+// the existing ItemBreakdown shape so all views keep rendering.
+function defaultCustomItem(id: string, name: string): CeilingItem {
+  return {
+    id, name, surface: 'ceiling', shape: 'rectangle', unit: 'mm',
+    dimensions: { dim1: 0, dim2: 0 }, fabricType: '', withPrinting: false,
+    withFleece: false, lightType: 'none', lightDepth: 0, ledWidth: 'standard',
+    gripperType: 'CW', quantity: 1, jointType: 'none', jointPosition: 0,
+    ledSpacingMM: 125, ledModuleType: 'standard', daliDriver: 'dt8',
+    driverOverrides: {}, notes: '',
+  }
+}
+
+function EMPTY_FABRIC_DETAIL(): FabricDetail {
+  return {
+    panels: [], totalBilledArea: 0, totalUsedArea: 0, totalWastageArea: 0,
+    hasJoint: false, jointPosition: '',
+  }
+}
+
 export function toM(v: number, unit: 'mm' | 'feet' | 'meters'): number {
   if (unit === 'feet') return v * FT
   if (unit === 'mm') return v * MM
@@ -274,6 +295,10 @@ function ledKey(item: CeilingItem): string {
   return item.ledModuleType === '12dot' ? 'Single Colour 12Dot' : 'Single Colour'
 }
 
+// Analog RGB/RGBW: one V2 Controller per this many 600W drivers (repeaters are
+// 1:1 with drivers). Set to 4 or 5 as required.
+const RGB_DRIVERS_PER_CONTROLLER = 4
+
 // Module-count limits per driver type (per Pongs LED Module & Driver Guide)
 const DALI_TW_MOD_PER_DRV  = 10  // DT8 150W / DA4m — tunable white DALI (max 10 modules)
 const DALI_SC_MOD_PER_DRV  = 13  // DT2 200W  — single colour DALI dimmable
@@ -347,7 +372,7 @@ function addCtrl(key: string, qty: number, tier: PriceTier): LineItem {
   return { description: key, qty, unit: 'nos', dealerRate: pr.dealer, tierRate: p(pr, tier), dealerAmount: qty * pr.dealer, tierAmount: qty * p(pr, tier) }
 }
 
-function buildDriverLines(totalModules: number, lightType: string, tier: PriceTier, daliDriver?: 'dt8' | 'da4m', preferredDriverWatt?: string, ledModuleType?: string): LineItem[] {
+function buildDriverLines(totalModules: number, lightType: string, tier: PriceTier, daliDriver?: 'dt8' | 'da4m', preferredDriverWatt?: string, ledModuleType?: string, dimmableWithoutDali?: boolean, rgbDali?: boolean): LineItem[] {
   const items: LineItem[] = []
 
   if (lightType === 'tunable_dali') {
@@ -365,16 +390,45 @@ function buildDriverLines(totalModules: number, lightType: string, tier: PriceTi
       items.push(addCtrl('DA4m', da4mCount, tier))
     }
 
+  } else if (lightType === 'single_color_dimmable' && dimmableWithoutDali) {
+    // Single Colour Dimmable WITHOUT DALI (Feature 2). Standard drivers sized on
+    // single-colour wattage, plus the single-colour control family:
+    //   Power Repeaters = number of drivers
+    //   Controllers     = 1 per 3 repeaters (ceil)
+    //   Remote          = always 1
+    const scWatts = ledModuleType === '12dot' ? SC_WATTS_PER_M_12DOT : SC_WATTS_PER_M_STANDARD
+    const specs = makeDriverSpecs(scWatts)
+    const forcedSpec = preferredDriverWatt ? specs.find(s => s.key === preferredDriverWatt) : null
+    const drvCounts = forcedSpec
+      ? { [forcedSpec.key]: Math.ceil(totalModules / forcedSpec.modules) }
+      : packDrivers(totalModules, specs)
+    let totalDrivers = 0
+    for (const [name, qty] of Object.entries(drvCounts)) {
+      const spec = STANDARD_DRIVERS[name]
+      items.push({
+        description: `${name} Driver (Single Colour Dimmable)`,
+        qty, unit: 'nos',
+        dealerRate: spec.price.dealer, tierRate: p(spec.price, tier),
+        dealerAmount: qty * spec.price.dealer, tierAmount: qty * p(spec.price, tier),
+      })
+      totalDrivers += qty
+    }
+    const repeaters = totalDrivers
+    const controllers = Math.max(1, Math.ceil(repeaters / 3))
+    items.push(addCtrl('EV1 Power Repeater', repeaters, tier))
+    items.push(addCtrl('V1 Controller', controllers, tier))
+    items.push(addCtrl('RT1 Remote', 1, tier))
+
   } else if (lightType === 'single_color_dimmable') {
+    // Single Colour Dimmable WITH DALI — DALI-2 200W drive only.
+    // (DA4m controller removed per updated requirement.)
     const drvCount = Math.ceil(totalModules / DALI_SC_MOD_PER_DRV)
-    const da4mCount = Math.ceil(drvCount / 3)
     items.push({
       description: `DT2 200W Driver [max 13 modules each]`,
       qty: drvCount, unit: 'nos',
       dealerRate: DALI2_DRIVE_200W.price.dealer, tierRate: p(DALI2_DRIVE_200W.price, tier),
       dealerAmount: drvCount * DALI2_DRIVE_200W.price.dealer, tierAmount: drvCount * p(DALI2_DRIVE_200W.price, tier),
     })
-    items.push(addCtrl('DA4m', da4mCount, tier))
 
   } else if (lightType === 'tunable') {
     // Standard Tunable White — all available driver sizes + EV2 (1 per driver) + V2 Controller (1 per 4 EV2) + RT2 Remote
@@ -429,14 +483,25 @@ function buildDriverLines(totalModules: number, lightType: string, tier: PriceTi
       dealerRate: spec.price.dealer, tierRate: p(spec.price, tier),
       dealerAmount: count * spec.price.dealer, tierAmount: count * p(spec.price, tier),
     })
-    items.push(addCtrl('V2 Controller', 1, tier))
-    items.push(addCtrl('RT2 Remote', 1, tier))
+    if (rgbDali) {
+      // DALI RGB/RGBW: one DALI controller per driver — DA4M for RGB, DA5M for
+      // RGBW. No power repeater and no remote in the DALI configuration.
+      items.push(addCtrl(lightType === 'rgbw' ? 'DA5M' : 'DA4m', count, tier))
+    } else {
+      // Analog RGB/RGBW: power repeaters = number of drivers, one controller per
+      // RGB_DRIVERS_PER_CONTROLLER drivers, plus a single remote.
+      const repeaters = count
+      const controllers = Math.max(1, Math.ceil(count / RGB_DRIVERS_PER_CONTROLLER))
+      items.push(addCtrl('EV2 Power Repeater', repeaters, tier))
+      items.push(addCtrl('V2 Controller', controllers, tier))
+      items.push(addCtrl('RT2 Remote', 1, tier))
+    }
   }
 
   return items
 }
 
-export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: number, manualRates?: ManualRates): ItemBreakdown {
+export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: number, manualRates?: ManualRates, opts?: { skipDrivers?: boolean }): ItemBreakdown {
   const geo = getGeometry(item)
   const { widthM, lengthM, areaM2, perimeterM } = geo
   const lineItems: LineItem[] = []
@@ -592,30 +657,35 @@ export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: 
     //  - Looped: all ceilings form one continuous lighting system — LED modules are
     //    summed across the full quantity FIRST, then drivers are selected once from
     //    the combined wattage. This usually yields fewer drivers.
-    const isLooped = item.lightingConfig === 'looped'
-    let driverLines: LineItem[]
-    if (isLooped) {
-      driverLines = buildDriverLines(totalRunningMeters * qty, item.lightType, effectiveTier, item.daliDriver, item.preferredDriverWatt, item.ledModuleType)
-    } else {
-      driverLines = buildDriverLines(totalRunningMeters, item.lightType, effectiveTier, item.daliDriver, item.preferredDriverWatt, item.ledModuleType)
-      // Scale per-ceiling driver counts to the full quantity
+    // Item Looping (Feature 1): when this item belongs to a loop group, the
+    // group's drivers are sized once at the quote level — so skip per-item
+    // driver generation here. Everything else (fabric/LED/gripper) is unchanged.
+    if (!opts?.skipDrivers) {
+      const isLooped = item.lightingConfig === 'looped'
+      let driverLines: LineItem[]
+      if (isLooped) {
+        driverLines = buildDriverLines(totalRunningMeters * qty, item.lightType, effectiveTier, item.daliDriver, item.preferredDriverWatt, item.ledModuleType, item.dimmableWithoutDali, item.rgbDali)
+      } else {
+        driverLines = buildDriverLines(totalRunningMeters, item.lightType, effectiveTier, item.daliDriver, item.preferredDriverWatt, item.ledModuleType, item.dimmableWithoutDali, item.rgbDali)
+        // Scale per-ceiling driver counts to the full quantity
+        for (const dl of driverLines) {
+          dl.qty = dl.qty * qty
+          dl.dealerAmount = round2(dl.qty * dl.dealerRate)
+          dl.tierAmount = round2(dl.qty * dl.tierRate)
+        }
+      }
+      // Apply manual overrides — user can increase or decrease qty (override = TOTAL count)
+      const overrides = item.driverOverrides ?? {}
       for (const dl of driverLines) {
-        dl.qty = dl.qty * qty
-        dl.dealerAmount = round2(dl.qty * dl.dealerRate)
-        dl.tierAmount = round2(dl.qty * dl.tierRate)
+        const ov = overrides[dl.description]
+        if (ov !== undefined && ov >= 0 && ov !== dl.qty) {
+          dl.qty = ov
+          dl.dealerAmount = round2(ov * dl.dealerRate)
+          dl.tierAmount = round2(ov * dl.tierRate)
+        }
       }
+      lineItems.push(...driverLines)
     }
-    // Apply manual overrides — user can increase or decrease qty (override = TOTAL count)
-    const overrides = item.driverOverrides ?? {}
-    for (const dl of driverLines) {
-      const ov = overrides[dl.description]
-      if (ov !== undefined && ov >= 0 && ov !== dl.qty) {
-        dl.qty = ov
-        dl.dealerAmount = round2(ov * dl.dealerRate)
-        dl.tierAmount = round2(ov * dl.tierRate)
-      }
-    }
-    lineItems.push(...driverLines)
   }
 
   // Line items already carry TOTAL quantities — no further multiplication here
@@ -646,10 +716,150 @@ export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: 
   }
 }
 
+// Recompute a breakdown's roll-up totals after its lineItems array is mutated
+// (used when group-level driver lines are attached to an item — Feature 1).
+function recomputeBreakdownTotals(bd: ItemBreakdown): void {
+  bd.subtotalDealer = round2(bd.lineItems.reduce((s, l) => s + l.dealerAmount, 0))
+  bd.subtotalTier   = round2(bd.lineItems.reduce((s, l) => s + l.tierAmount,   0))
+  bd.subtotalFinal  = bd.subtotalTier
+  bd.itemTotal      = round2(bd.subtotalFinal + bd.installationCost)
+}
+
+// Feature 1 — Item Looping. Items sharing the same positive `loopGroup` have
+// their lighting treated as ONE continuous system: drivers are sized once from
+// the group's combined running metres, instead of per item. The grouped items
+// are computed with skipDrivers, then the combined driver lines are attached to
+// the first lit item of each group. Non-grouped items are never touched.
+function applyItemLooping(quote: Quote, tier: PriceTier, rate: number): ItemBreakdown[] {
+  const groups = new Map<number, number[]>() // loopGroup -> item indices
+  quote.items.forEach((it, idx) => {
+    const g = Number(it.loopGroup ?? 0)
+    if (g > 0) {
+      if (!groups.has(g)) groups.set(g, [])
+      groups.get(g)!.push(idx)
+    }
+  })
+
+  // A group only actually loops when it has 2+ members; a lone item in a group
+  // behaves exactly as an ordinary (ungrouped) item.
+  const groupList = Array.from(groups.values())
+  const loopedIdx = new Set<number>()
+  for (const idxs of groupList) {
+    if (idxs.length >= 2) idxs.forEach((i: number) => loopedIdx.add(i))
+  }
+
+  const breakdowns = quote.items.map((item, idx) =>
+    calculateItem(item, tier, rate, quote.manualRates, { skipDrivers: loopedIdx.has(idx) }),
+  )
+
+  for (const idxs of groupList) {
+    if (idxs.length < 2) continue
+    // Lit members only; use the first lit member as the driver "host".
+    const lit = idxs.filter((i: number) => quote.items[i].lightType !== 'none' && breakdowns[i].ledDetail)
+    if (lit.length === 0) continue
+    const combinedModules = round2(
+      lit.reduce((s: number, i: number) => s + (breakdowns[i].ledDetail!.totalRunningMeters * Math.max(1, Math.round(quote.items[i].quantity || 1))), 0),
+    )
+    const host = quote.items[lit[0]]
+    const effectiveTier: PriceTier = tier === 'manual'
+      ? (quote.manualRates?.otherItemsTier ?? 'dealer')
+      : tier
+    const driverLines = buildDriverLines(
+      combinedModules, host.lightType, effectiveTier,
+      host.daliDriver, host.preferredDriverWatt, host.ledModuleType, host.dimmableWithoutDali, host.rgbDali,
+    )
+    // Apply the host item's manual driver overrides to the combined lines.
+    const overrides = host.driverOverrides ?? {}
+    for (const dl of driverLines) {
+      const ov = overrides[dl.description]
+      if (ov !== undefined && ov >= 0 && ov !== dl.qty) {
+        dl.qty = ov
+        dl.dealerAmount = round2(ov * dl.dealerRate)
+        dl.tierAmount = round2(ov * dl.tierRate)
+      }
+    }
+    breakdowns[lit[0]].lineItems.push(...driverLines)
+    recomputeBreakdownTotals(breakdowns[lit[0]])
+  }
+
+  return breakdowns
+}
+
+// Feature 4 — Manual (Custom). A completely free-form quotation: no automatic
+// calculation, dependencies or pricing logic. Each custom row becomes a
+// synthetic ItemBreakdown carrying exactly one line item (qty × selling price).
+function calculateCustomQuote(quote: Quote): QuoteBreakdown {
+  const lines = quote.customLines ?? []
+  const itemBreakdowns: ItemBreakdown[] = lines.map((cl, i) => {
+    const qty = Number(cl.qty) || 0
+    const sell = Number(cl.sellingPrice) || 0
+    const cost = Number(cl.cost) || 0
+    const amount = round2(qty * sell)
+    const costAmount = round2(qty * cost)
+    const lineItem: LineItem = {
+      description: cl.description || `Item ${i + 1}`,
+      qty, unit: 'nos',
+      dealerRate: cost, tierRate: sell,
+      dealerAmount: costAmount, tierAmount: amount,
+    }
+    // A minimal, valid ItemBreakdown so existing views never crash on it.
+    // quantity carries the row qty so the PDF shows Qty × Unit = Amount correctly.
+    const syntheticItem = {
+      ...defaultCustomItem(cl.id, cl.description || `Item ${i + 1}`),
+      quantity: qty || 1,
+    }
+    return {
+      item: syntheticItem,
+      dim1M: 0, dim2M: 0, widthM: 0, lengthM: 0,
+      areaM2: 0, areaM2Used: 0, perimeterM: 0,
+      fabricDetail: EMPTY_FABRIC_DETAIL(),
+      ledDetail: null,
+      lineItems: [lineItem],
+      installationCost: 0,
+      subtotalDealer: costAmount,
+      subtotalTier: amount,
+      subtotalFinal: amount,
+      itemTotal: amount,
+    }
+  })
+
+  const materialsTotalTier = round2(itemBreakdowns.reduce((s, b) => s + b.subtotalTier, 0))
+  const materialsTotalDealer = round2(itemBreakdowns.reduce((s, b) => s + b.subtotalDealer, 0))
+  const transportCost = quote.transportCost ?? 0
+  // No markup and no install rate are applied in custom mode — selling prices
+  // are final. Transport and GST toggles still apply as commercial terms.
+  const subtotalBeforeGst = round2(materialsTotalTier + transportCost)
+  const gstAmount = quote.includeGst ? round2(subtotalBeforeGst * 0.18) : 0
+  const grandTotal = round2(subtotalBeforeGst + gstAmount)
+
+  return {
+    quote,
+    itemBreakdowns,
+    materialsTotalDealer,
+    materialsTotalTier,
+    materialsTotalFinal: materialsTotalTier,
+    totalInstallation: 0,
+    transportCost,
+    subtotalBeforeGst,
+    gstAmount,
+    grandTotal,
+    totalSqft: 0,
+    pricePerSqft: 0,
+  }
+}
+
 export function calculateQuote(quote: Quote): QuoteBreakdown {
   const tier = quote.priceTier
+  // Manual (Custom) bypasses the entire automatic engine.
+  if (tier === 'manual_custom') return calculateCustomQuote(quote)
+
   const rate = quote.installationRatePerSqft ?? INSTALLATION_RATE_PER_SQFT
-  const itemBreakdowns = quote.items.map(item => calculateItem(item, tier, rate, quote.manualRates))
+  // Item Looping only engages when a loop group has 2+ members; otherwise this
+  // returns exactly the same per-item breakdowns as before.
+  const hasLoopGroups = quote.items.some(it => Number(it.loopGroup ?? 0) > 0)
+  const itemBreakdowns = hasLoopGroups
+    ? applyItemLooping(quote, tier, rate)
+    : quote.items.map(item => calculateItem(item, tier, rate, quote.manualRates))
 
   const materialsTotalDealer = round2(itemBreakdowns.reduce((s, b) => s + b.subtotalDealer, 0))
   const materialsTotalTier   = round2(itemBreakdowns.reduce((s, b) => s + b.subtotalTier,   0))
