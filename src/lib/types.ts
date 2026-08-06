@@ -1,4 +1,14 @@
-export type PriceTier = 'dealer' | 'msp' | 'specifiors' | 'manual'
+export type PriceTier = 'dealer' | 'msp' | 'specifiors' | 'manual' | 'manual_custom'
+
+// A free-form quotation row for the "Manual (Custom)" tab. Completely
+// independent of the automatic calculation engine — the user types everything.
+export interface CustomLine {
+  id: string
+  description: string
+  qty: number
+  cost: number          // internal unit cost (for internal review only)
+  sellingPrice: number  // unit selling price (drives the quote total)
+}
 
 export interface ManualRates {
   fabricPerSqm: number
@@ -47,6 +57,14 @@ export interface CeilingItem {
   // lighting system — drivers sized from combined wattage. 'non_looped' (default)
   // sizes drivers per ceiling then multiplies by quantity.
   lightingConfig?: 'looped' | 'non_looped'
+  // Item Looping: items sharing the same positive loopGroup have their lighting
+  // treated as ONE continuous system — drivers are sized once from the combined
+  // wattage of every item in the group. undefined/0 = not grouped (default).
+  loopGroup?: number
+  // Single Colour Dimmable variant: when true, use the non-DALI configuration
+  // (standard drivers + EV1 repeaters + V1 controllers + RT1 remote). undefined
+  // or false preserves the existing DALI-2 behaviour.
+  dimmableWithoutDali?: boolean
   marginMM?: number  // fabric margin per side in mm (smart: moved to cut axis if it would cause roll-width jump)
   printingRatePerSqm?: number  // override standard printing rate
   notes: string
@@ -65,6 +83,8 @@ export interface Quote {
   priceTier: PriceTier
   markupPercent: number
   items: CeilingItem[]
+  // Free-form rows used only when priceTier === 'manual_custom'
+  customLines?: CustomLine[]
   installationRatePerSqft: number
   transportCost: number
   includeGst: boolean

@@ -34,6 +34,7 @@ export default async function ClientPage({ params }: { params: { id: string } })
   const co = getCompany(quote.company)
 
   const bd = calculateQuote(quote)
+  const isCustom = quote.priceTier === 'manual_custom'
 
   const dateStr = new Date(quote.date).toLocaleDateString('en-IN', {
     day: 'numeric', month: 'long', year: 'numeric',
@@ -321,18 +322,20 @@ export default async function ClientPage({ params }: { params: { id: string } })
                       </td>
                       <td style={{ padding: '11px 10px', verticalAlign: 'top', maxWidth: '260px' }}>
                         <p style={{ fontWeight: 700, color: '#111', marginBottom: '3px', lineHeight: 1.3, fontSize: '11px' }}>
-                          {item.name || 'Stretch Ceiling System'}
+                          {item.name || (isCustom ? 'Item' : 'Stretch Ceiling System')}
                         </p>
-                        <p style={{ color: '#888', fontSize: '10px', lineHeight: 1.5 }}>
-                          {item.fabricType} &nbsp;·&nbsp; {formatDims(item)}
-                        </p>
-                        {item.lightType !== 'none' && (
+                        {!isCustom && (
+                          <p style={{ color: '#888', fontSize: '10px', lineHeight: 1.5 }}>
+                            {item.fabricType} &nbsp;·&nbsp; {formatDims(item)}
+                          </p>
+                        )}
+                        {!isCustom && item.lightType !== 'none' && (
                           <p style={{ color: '#888', fontSize: '10px' }}>
                             {lightLabel[item.lightType] ?? 'LED Cove'}{item.lightDepth ? ` · ${item.lightDepth}" cove depth` : ''}
                           </p>
                         )}
-                        {item.withPrinting && <p style={{ color: '#888', fontSize: '10px' }}>Custom digital printing</p>}
-                        {item.withFleece   && <p style={{ color: '#888', fontSize: '10px' }}>Felt pad / fleece backing</p>}
+                        {!isCustom && item.withPrinting && <p style={{ color: '#888', fontSize: '10px' }}>Custom digital printing</p>}
+                        {!isCustom && item.withFleece   && <p style={{ color: '#888', fontSize: '10px' }}>Felt pad / fleece backing</p>}
                         {item.notes        && <p style={{ color: '#bbb', fontSize: '10px', fontStyle: 'italic', marginTop: '2px' }}>{item.notes}</p>}
                       </td>
                       <td style={{ padding: '11px 10px', verticalAlign: 'top', textAlign: 'center', color: '#888', fontSize: '10px' }}>{HSN_CEILING}</td>

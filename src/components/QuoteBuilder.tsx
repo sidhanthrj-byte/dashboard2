@@ -5,7 +5,7 @@ import { Plus, Save, Loader2, BookUser, Trash2, ChevronUp } from 'lucide-react'
 import { v4 as uuid } from 'uuid'
 import { useRouter } from 'next/navigation'
 import CeilingItemForm, { defaultItem } from './CeilingItemForm'
-import type { Quote, CeilingItem, PriceTier, QuoteDisplayMode, ManualRates } from '@/lib/types'
+import type { Quote, CeilingItem, PriceTier, QuoteDisplayMode, ManualRates, CustomLine } from '@/lib/types'
 import { calculateQuote, fmtINR } from '@/lib/calculations'
 import { listClients, saveClient, deleteClient, type SavedClient } from '@/lib/clients'
 import { listCompanies, DEFAULT_COMPANY } from '@/lib/companies'
@@ -48,6 +48,12 @@ export default function QuoteBuilder({ initial, mode }: Props) {
   const [items, setItems] = useState<CeilingItem[]>(
     initial?.items?.length ? initial.items : [defaultItem(uuid())]
   )
+
+  // Feature 4 — free-form rows for the Manual (Custom) tab.
+  const [customLines, setCustomLines] = useState<CustomLine[]>(
+    initial?.customLines?.length ? initial.customLines : [{ id: uuid(), description: '', qty: 1, cost: 0, sellingPrice: 0 }]
+  )
+  const isCustom = meta.priceTier === 'manual_custom'
 
   const [preview, setPreview] = useState<ReturnType<typeof calculateQuote> | null>(null)
   const [clients, setClients] = useState<SavedClient[]>([])
@@ -100,12 +106,13 @@ export default function QuoteBuilder({ initial, mode }: Props) {
         ...meta,
         items,
         manualRates: meta.priceTier === 'manual' ? manualRates : undefined,
+        customLines: meta.priceTier === 'manual_custom' ? customLines : undefined,
       }
       setPreview(calculateQuote(fakeQuote))
     } catch {
       setPreview(null)
     }
-  }, [meta, items, manualRates])
+  }, [meta, items, manualRates, customLines])
 
   useEffect(() => { updatePreview() }, [updatePreview])
 
@@ -123,14 +130,20 @@ export default function QuoteBuilder({ initial, mode }: Props) {
 
   async function saveQuote(redirectTo: 'team' | 'internal' = 'team') {
     if (!meta.clientName.trim()) { alert('Please enter a client name.'); return }
-    if (items.length === 0) { alert('Please add at least one ceiling item.'); return }
+    if (isCustom) {
+      if (!customLines.some(l => l.description.trim())) { alert('Please add at least one custom line.'); return }
+    } else if (items.length === 0) { alert('Please add at least one ceiling item.'); return }
 
     const isInternal = redirectTo === 'internal'
     if (isInternal) setSavingInternal(true)
     else setSaving(true)
 
     try {
-      const payload = { ...meta, items, manualRates: meta.priceTier === 'manual' ? manualRates : undefined }
+      const payload = {
+        ...meta, items,
+        manualRates: meta.priceTier === 'manual' ? manualRates : undefined,
+        customLines: isCustom ? customLines : undefined,
+      }
       const url = mode === 'edit' ? `/api/quotes/${initial!.id}` : '/api/quotes'
       const method = mode === 'edit' ? 'PUT' : 'POST'
       const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
@@ -166,7 +179,26 @@ export default function QuoteBuilder({ initial, mode }: Props) {
     { value: 'msp', label: 'MSP', desc: 'Market selling price' },
     { value: 'specifiors', label: 'Specifiors', desc: 'Architects / Specifiers' },
     { value: 'manual', label: 'Manual', desc: 'Set custom rates' },
+    { value: 'manual_custom', label: 'Manual (Custom)', desc: 'Free-form rows' },
   ]
+
+  // Options for the custom-line item dropdown (selectable but free-text via datalist).
+  const CUSTOM_ITEM_SUGGESTIONS = [
+    'Stretch Ceiling Fabric', 'Printed Fabric', 'Acoustic Fabric', 'Translucent Fabric',
+    'LED Strip', 'LED Driver', 'DALI Controller', 'Gripper Track', 'Profile',
+    'Installation', 'Transport', 'Fabrication', 'Site Survey', 'Miscellaneous',
+  ]
+
+  function updateCustomLine(id: string, patch: Partial<CustomLine>) {
+    setCustomLines(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l))
+  }
+  function addCustomLine() {
+    setCustomLines(prev => [...prev, { id: uuid(), description: '', qty: 1, cost: 0, sellingPrice: 0 }])
+  }
+  function removeCustomLine(id: string) {
+    setCustomLines(prev => prev.filter(l => l.id !== id))
+  }
+  const customTotal = customLines.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.sellingPrice) || 0), 0)
 
   const SectionHead = ({ n, title, note, right }: { n: string; title: string; note?: string; right?: React.ReactNode }) => (
     <div className="flex items-end justify-between mb-4">
@@ -256,7 +288,7 @@ export default function QuoteBuilder({ initial, mode }: Props) {
         <SectionHead n="02" title="Commercial terms" note="Pricing basis & charges" />
 
         <label className="label">Pricing tier</label>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mb-4">
           {TIER_OPTIONS.map(t => (
             <button key={t.value} type="button" onClick={() => setMeta(m => ({ ...m, priceTier: t.value }))}
               className={`opt ${meta.priceTier === t.value ? 'opt-on' : ''}`}>
@@ -293,10 +325,14 @@ export default function QuoteBuilder({ initial, mode }: Props) {
         )}
 
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-5 gap-y-4 mb-5">
-          <div><label className="label">Markup %</label>
-            <input type="number" min="0" max="200" className="input fig" value={meta.markupPercent} onChange={e => setMeta(m => ({ ...m, markupPercent: parseFloat(e.target.value) || 0 }))} /></div>
-          <div><label className="label">Install ₹/sqft</label>
-            <input type="number" min="0" className="input fig" value={meta.installationRatePerSqft} onChange={e => setMeta(m => ({ ...m, installationRatePerSqft: parseFloat(e.target.value) || 0 }))} /></div>
+          {!isCustom && (
+            <div><label className="label">Markup %</label>
+              <input type="number" min="0" max="200" className="input fig" value={meta.markupPercent} onChange={e => setMeta(m => ({ ...m, markupPercent: parseFloat(e.target.value) || 0 }))} /></div>
+          )}
+          {!isCustom && (
+            <div><label className="label">Install ₹/sqft</label>
+              <input type="number" min="0" className="input fig" value={meta.installationRatePerSqft} onChange={e => setMeta(m => ({ ...m, installationRatePerSqft: parseFloat(e.target.value) || 0 }))} /></div>
+          )}
           <div><label className="label">Transport ₹</label>
             <input type="number" min="0" className="input fig" value={meta.transportCost} onChange={e => setMeta(m => ({ ...m, transportCost: parseFloat(e.target.value) || 0 }))} /></div>
         </div>
@@ -325,23 +361,80 @@ export default function QuoteBuilder({ initial, mode }: Props) {
 
       <div className="mt-9" style={{ borderTop: '1px solid var(--rule)' }} />
 
-      {/* §03 Schedule of items */}
-      <section className="pt-9">
-        <SectionHead n="03" title="Schedule of items" note={`${items.length} ceiling${items.length !== 1 ? 's' : ''}`} />
-        <div className="space-y-4">
-          {items.map((item, idx) => (
-            <CeilingItemForm key={item.id} item={item} index={idx}
-              priceTier={meta.priceTier} installRatePerSqft={meta.installationRatePerSqft}
-              manualRates={meta.priceTier === 'manual' ? manualRates : undefined}
-              onChange={updated => updateItem(idx, updated)} onRemove={() => removeItem(idx)} />
-          ))}
-        </div>
-        <button type="button" onClick={addItem}
-          className="mt-4 w-full py-3 rounded-[4px] text-[13px] font-medium flex items-center justify-center gap-2 transition-colors"
-          style={{ border: '1px dashed var(--rule-2)', color: 'var(--muted)' }}>
-          <Plus size={15} /> Add ceiling item
-        </button>
-      </section>
+      {/* §03 Schedule of items — free-form in Manual (Custom), ceiling schedule otherwise */}
+      {isCustom ? (
+        <section className="pt-9">
+          <SectionHead n="03" title="Custom quotation" note="Free-form — no automatic pricing" />
+          <p className="text-[12.5px] mb-4" style={{ color: 'var(--muted)' }}>
+            Build the quotation by hand. Every value below is used exactly as entered — no calculations,
+            dependencies or automatic pricing are applied.
+          </p>
+
+          {/* Column headers (desktop) */}
+          <div className="hidden sm:grid gap-2 px-1 pb-2 mb-1" style={{ gridTemplateColumns: '1fr 80px 110px 110px 110px 32px', borderBottom: '1px solid var(--rule-2)' }}>
+            <div className="label mb-0">Item</div>
+            <div className="label mb-0 text-right">Qty</div>
+            <div className="label mb-0 text-right">Cost ₹</div>
+            <div className="label mb-0 text-right">Selling ₹</div>
+            <div className="label mb-0 text-right">Amount</div>
+            <div />
+          </div>
+
+          <datalist id="custom-item-suggestions">
+            {CUSTOM_ITEM_SUGGESTIONS.map(s => <option key={s} value={s} />)}
+          </datalist>
+
+          <div className="space-y-2">
+            {customLines.map((l) => {
+              const amount = (Number(l.qty) || 0) * (Number(l.sellingPrice) || 0)
+              return (
+                <div key={l.id} className="grid gap-2 items-center" style={{ gridTemplateColumns: '1fr 80px 110px 110px 110px 32px' }}>
+                  <input list="custom-item-suggestions" className="input" placeholder="Select or type item"
+                    value={l.description} onChange={e => updateCustomLine(l.id, { description: e.target.value })} />
+                  <input type="number" min="0" step="1" className="input fig text-right" placeholder="1"
+                    value={l.qty || ''} onChange={e => updateCustomLine(l.id, { qty: parseFloat(e.target.value) || 0 })} />
+                  <input type="number" min="0" step="1" className="input fig text-right" placeholder="0"
+                    value={l.cost || ''} onChange={e => updateCustomLine(l.id, { cost: parseFloat(e.target.value) || 0 })} />
+                  <input type="number" min="0" step="1" className="input fig text-right" placeholder="0"
+                    value={l.sellingPrice || ''} onChange={e => updateCustomLine(l.id, { sellingPrice: parseFloat(e.target.value) || 0 })} />
+                  <div className="fig text-[13px] text-right" style={{ color: 'var(--ink)' }}>{fmtINR(amount)}</div>
+                  <button type="button" onClick={() => removeCustomLine(l.id)} className="btn-ghost btn-sm px-1.5" title="Remove row"
+                    disabled={customLines.length === 1} style={{ color: 'var(--accent)' }}>
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+          <button type="button" onClick={addCustomLine}
+            className="mt-4 w-full py-3 rounded-[4px] text-[13px] font-medium flex items-center justify-center gap-2 transition-colors"
+            style={{ border: '1px dashed var(--rule-2)', color: 'var(--muted)' }}>
+            <Plus size={15} /> Add row
+          </button>
+          <div className="flex justify-end mt-3">
+            <div className="fig text-[13px]" style={{ color: 'var(--muted)' }}>
+              Lines total: <span style={{ color: 'var(--ink)' }}>{fmtINR(customTotal)}</span>
+            </div>
+          </div>
+        </section>
+      ) : (
+        <section className="pt-9">
+          <SectionHead n="03" title="Schedule of items" note={`${items.length} ceiling${items.length !== 1 ? 's' : ''}`} />
+          <div className="space-y-4">
+            {items.map((item, idx) => (
+              <CeilingItemForm key={item.id} item={item} index={idx}
+                priceTier={meta.priceTier} installRatePerSqft={meta.installationRatePerSqft}
+                manualRates={meta.priceTier === 'manual' ? manualRates : undefined}
+                onChange={updated => updateItem(idx, updated)} onRemove={() => removeItem(idx)} />
+            ))}
+          </div>
+          <button type="button" onClick={addItem}
+            className="mt-4 w-full py-3 rounded-[4px] text-[13px] font-medium flex items-center justify-center gap-2 transition-colors"
+            style={{ border: '1px dashed var(--rule-2)', color: 'var(--muted)' }}>
+            <Plus size={15} /> Add ceiling item
+          </button>
+        </section>
+      )}
 
       <div className="mt-9" style={{ borderTop: '1px solid var(--rule)' }} />
 
@@ -365,6 +458,9 @@ export default function QuoteBuilder({ initial, mode }: Props) {
             <li>· DALI tunable: DT8 150 W max 10 modules + DA4m at 1 per 3 drivers</li>
             <li>· Standard tunable/dimmable: 200/450/600 W drivers + EV2 + V2 + RT2</li>
             <li>· Single colour: 80% driver capacity + EV1 + V1 + RT1</li>
+            <li>· Single colour dimmable (without DALI): std drivers · repeaters = drivers · 1 controller per 3 · 1 remote</li>
+            <li>· RGB uses DA4M controller · RGBW uses DA5M controller</li>
+            <li>· Item looping: items in the same loop group share one driver set (combined wattage)</li>
           </ul>
         </details>
       </section>

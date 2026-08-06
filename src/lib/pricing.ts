@@ -78,6 +78,10 @@ export const XLG_200I: DriverSpec = {
 export const CONTROLS: Record<string, Price> = {
   // DALI controller (1 per 3 DALI drivers)
   'DA4m':                { dealer: 1800, msp: 2300, specifiors: 2100 },
+  // RGB controller. NOTE: also reused as the RGB controller (Feature 3).
+  // DA5M is the RGBW controller. Pricing below is a PLACEHOLDER copied from DA4m
+  // — replace with the real DA5M price list before relying on RGBW quotes.
+  'DA5M':                { dealer: 1800, msp: 2300, specifiors: 2100 },
   // Single Colour system
   'EV1 Power Repeater':  { dealer: 1700, msp: 2000, specifiors: 1900 },
   'V1 Controller':       { dealer: 1300, msp: 1600, specifiors: 1500 },
@@ -93,6 +97,9 @@ export const FLEECE: Price = { dealer: 500, msp: 1000, specifiors: 700 }
 export const ROLL_WIDTHS = [2, 3, 4, 5] // metres, ascending
 
 export function p(price: Price, tier: PriceTier): number {
-  if (tier === 'manual') return price.dealer
+  // 'manual' and 'manual_custom' both fall back to dealer pricing for any
+  // automatic line item (manual_custom bypasses the engine entirely, but this
+  // guards against NaN if p() is ever reached under that tier).
+  if (tier === 'manual' || tier === 'manual_custom') return price.dealer
   return price[tier]
 }

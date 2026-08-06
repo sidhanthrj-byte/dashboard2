@@ -71,6 +71,8 @@ export async function initQuotesTable() {
   try { await db.execute(`ALTER TABLE pongs_quotes ADD COLUMN root_id TEXT`) } catch { /* exists */ }
   try { await db.execute(`ALTER TABLE pongs_quotes ADD COLUMN revision INTEGER DEFAULT 0`) } catch { /* exists */ }
   try { await db.execute(`ALTER TABLE pongs_quotes ADD COLUMN revised_by TEXT`) } catch { /* exists */ }
+  // Manual (Custom) free-form rows (Feature 4)
+  try { await db.execute(`ALTER TABLE pongs_quotes ADD COLUMN custom_lines_json TEXT`) } catch { /* exists */ }
   // Backfill: existing standalone quotes are their own root at revision 0.
   await db.execute(`UPDATE pongs_quotes SET root_id = id WHERE root_id IS NULL OR root_id = ''`)
   await db.execute(`UPDATE pongs_quotes SET revision = 0 WHERE revision IS NULL`)
@@ -138,13 +140,14 @@ export async function dbSaveQuote(quote: Record<string, unknown>) {
     String(quote.rootId ?? quote.id ?? ''),
     Number(quote.revision ?? 0),
     (quote.revisedBy as string) ?? null,
+    quote.customLines ? JSON.stringify(quote.customLines) : null,
   ]
   await db.execute(
     `INSERT INTO pongs_quotes (id, quote_number, client_name, project_name, location, date, valid_until,
       price_tier, markup_percent, installation_rate, transport_cost, include_gst, display_mode,
       items_json, notes, grand_total, client_email, client_phone, status, created_at, updated_at, manual_rates_json,
-      owner_email, company, parent_id, root_id, revision, revised_by)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      owner_email, company, parent_id, root_id, revision, revised_by, custom_lines_json)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       ON CONFLICT(id) DO UPDATE SET
         client_name=excluded.client_name, project_name=excluded.project_name,
         location=excluded.location, date=excluded.date, valid_until=excluded.valid_until,
@@ -155,7 +158,7 @@ export async function dbSaveQuote(quote: Record<string, unknown>) {
         client_email=excluded.client_email, client_phone=excluded.client_phone,
         status=excluded.status, updated_at=excluded.updated_at,
         manual_rates_json=excluded.manual_rates_json,
-        company=excluded.company`,
+        company=excluded.company, custom_lines_json=excluded.custom_lines_json`,
     args,
   )
 }
@@ -661,6 +664,7 @@ function rowToQuote(row: any): Record<string, unknown> {
     rootId: row.root_id ?? row.id,
     revision: Number(row.revision ?? 0),
     revisedBy: row.revised_by ?? undefined,
+    customLines: row.custom_lines_json ? JSON.parse(row.custom_lines_json as string) : undefined,
   }
 }
 

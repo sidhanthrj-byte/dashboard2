@@ -68,6 +68,7 @@ export default async function InternalPage({ params }: { params: { id: string } 
         const dimStr = item.item.shape === 'circle'
           ? `Ø${d.diameter} ${item.item.unit}`
           : `${d.dim1 ?? 0} × ${d.dim2 ?? 0} ${item.item.unit}`
+        const isCustom = item.fabricDetail.panels.length === 0 && !item.ledDetail
 
         return (
           <div key={item.item.id} className="mb-8 border border-slate-200 rounded-lg overflow-hidden">
@@ -82,9 +83,13 @@ export default async function InternalPage({ params }: { params: { id: string } 
                     {item.item.name || `Item ${idx + 1}`}
                   </span>
                   <span className="text-xs text-slate-500 ml-3">
-                    {dimStr} · {item.item.fabricType}
-                    {item.item.lightType !== 'none' && ` · ${item.item.lightType.replace(/_/g, ' ')}`}
-                    {item.item.quantity > 1 && ` · Qty: ${item.item.quantity}`}
+                    {isCustom
+                      ? `Custom line${item.item.quantity > 1 ? ` · Qty: ${item.item.quantity}` : ''}`
+                      : <>
+                          {dimStr} · {item.item.fabricType}
+                          {item.item.lightType !== 'none' && ` · ${item.item.lightType.replace(/_/g, ' ')}`}
+                          {item.item.quantity > 1 && ` · Qty: ${item.item.quantity}`}
+                        </>}
                   </span>
                 </div>
               </div>
@@ -95,6 +100,7 @@ export default async function InternalPage({ params }: { params: { id: string } 
             </div>
 
             {/* Fabric info */}
+            {!isCustom && (
             <div className="px-5 py-3 bg-blue-50 border-b border-blue-100 text-xs text-blue-800">
               {item.fabricDetail.panels.map((panel, pi) => (
                 <span key={pi} className="mr-6">
@@ -103,6 +109,7 @@ export default async function InternalPage({ params }: { params: { id: string } 
                 </span>
               ))}
             </div>
+            )}
 
             {/* LED info */}
             {item.ledDetail && (
