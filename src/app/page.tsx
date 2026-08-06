@@ -9,7 +9,7 @@ export default function HomePage() {
   const { me, loading } = useMe()
 
   if (loading) {
-    return <div className="flex items-center justify-center h-64 text-sm" style={{ color: 'var(--faint)' }}>Loading…</div>
+    return <div className="flex items-center justify-center h-64 text-sm text-stone-400">Loading…</div>
   }
 
   if (!can(me, 'dashboard', 'view')) {
