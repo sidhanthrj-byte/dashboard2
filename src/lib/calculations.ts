@@ -295,6 +295,10 @@ function ledKey(item: CeilingItem): string {
   return item.ledModuleType === '12dot' ? 'Single Colour 12Dot' : 'Single Colour'
 }
 
+// Analog RGB/RGBW: one V2 Controller per this many 600W drivers (repeaters are
+// 1:1 with drivers). Set to 4 or 5 as required.
+const RGB_DRIVERS_PER_CONTROLLER = 4
+
 // Module-count limits per driver type (per Pongs LED Module & Driver Guide)
 const DALI_TW_MOD_PER_DRV  = 10  // DT8 150W / DA4m — tunable white DALI (max 10 modules)
 const DALI_SC_MOD_PER_DRV  = 13  // DT2 200W  — single colour DALI dimmable
@@ -484,8 +488,12 @@ function buildDriverLines(totalModules: number, lightType: string, tier: PriceTi
       // RGBW. No power repeater and no remote in the DALI configuration.
       items.push(addCtrl(lightType === 'rgbw' ? 'DA5M' : 'DA4m', count, tier))
     } else {
-      // Analog RGB/RGBW (default, unchanged): V2 Controller + RT2 Remote.
-      items.push(addCtrl('V2 Controller', 1, tier))
+      // Analog RGB/RGBW: power repeaters = number of drivers, one controller per
+      // RGB_DRIVERS_PER_CONTROLLER drivers, plus a single remote.
+      const repeaters = count
+      const controllers = Math.max(1, Math.ceil(count / RGB_DRIVERS_PER_CONTROLLER))
+      items.push(addCtrl('EV2 Power Repeater', repeaters, tier))
+      items.push(addCtrl('V2 Controller', controllers, tier))
       items.push(addCtrl('RT2 Remote', 1, tier))
     }
   }
