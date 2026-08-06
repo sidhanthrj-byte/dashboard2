@@ -459,7 +459,8 @@ export default function QuoteBuilder({ initial, mode }: Props) {
             <li>· Standard tunable/dimmable: 200/450/600 W drivers + EV2 + V2 + RT2</li>
             <li>· Single colour: 80% driver capacity + EV1 + V1 + RT1</li>
             <li>· Single colour dimmable (without DALI): std drivers · repeaters = drivers · 1 controller per 3 · 1 remote</li>
-            <li>· RGB uses DA4M controller · RGBW uses DA5M controller</li>
+            <li>· RGB/RGBW analog: 600W drivers + V2 + remote · DALI: one DA4M (RGB) / DA5M (RGBW) per driver, no repeater/remote</li>
+            <li>· Single colour dimmable (DALI-2): DT2 200W driver only (no DA4m)</li>
             <li>· Item looping: items in the same loop group share one driver set (combined wattage)</li>
           </ul>
         </details>

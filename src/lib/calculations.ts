@@ -368,7 +368,7 @@ function addCtrl(key: string, qty: number, tier: PriceTier): LineItem {
   return { description: key, qty, unit: 'nos', dealerRate: pr.dealer, tierRate: p(pr, tier), dealerAmount: qty * pr.dealer, tierAmount: qty * p(pr, tier) }
 }
 
-function buildDriverLines(totalModules: number, lightType: string, tier: PriceTier, daliDriver?: 'dt8' | 'da4m', preferredDriverWatt?: string, ledModuleType?: string, dimmableWithoutDali?: boolean): LineItem[] {
+function buildDriverLines(totalModules: number, lightType: string, tier: PriceTier, daliDriver?: 'dt8' | 'da4m', preferredDriverWatt?: string, ledModuleType?: string, dimmableWithoutDali?: boolean, rgbDali?: boolean): LineItem[] {
   const items: LineItem[] = []
 
   if (lightType === 'tunable_dali') {
@@ -416,16 +416,15 @@ function buildDriverLines(totalModules: number, lightType: string, tier: PriceTi
     items.push(addCtrl('RT1 Remote', 1, tier))
 
   } else if (lightType === 'single_color_dimmable') {
-    // Single Colour Dimmable WITH DALI (unchanged — DALI-2 200W drive + DA4m).
+    // Single Colour Dimmable WITH DALI — DALI-2 200W drive only.
+    // (DA4m controller removed per updated requirement.)
     const drvCount = Math.ceil(totalModules / DALI_SC_MOD_PER_DRV)
-    const da4mCount = Math.ceil(drvCount / 3)
     items.push({
       description: `DT2 200W Driver [max 13 modules each]`,
       qty: drvCount, unit: 'nos',
       dealerRate: DALI2_DRIVE_200W.price.dealer, tierRate: p(DALI2_DRIVE_200W.price, tier),
       dealerAmount: drvCount * DALI2_DRIVE_200W.price.dealer, tierAmount: drvCount * p(DALI2_DRIVE_200W.price, tier),
     })
-    items.push(addCtrl('DA4m', da4mCount, tier))
 
   } else if (lightType === 'tunable') {
     // Standard Tunable White — all available driver sizes + EV2 (1 per driver) + V2 Controller (1 per 4 EV2) + RT2 Remote
@@ -480,10 +479,15 @@ function buildDriverLines(totalModules: number, lightType: string, tier: PriceTi
       dealerRate: spec.price.dealer, tierRate: p(spec.price, tier),
       dealerAmount: count * spec.price.dealer, tierAmount: count * p(spec.price, tier),
     })
-    // Feature 3 — controller selection only: RGBW → DA5M, RGB → DA4M.
-    // (Driver + remote logic is intentionally left unchanged.)
-    items.push(addCtrl(lightType === 'rgbw' ? 'DA5M' : 'DA4m', 1, tier))
-    items.push(addCtrl('RT2 Remote', 1, tier))
+    if (rgbDali) {
+      // DALI RGB/RGBW: one DALI controller per driver — DA4M for RGB, DA5M for
+      // RGBW. No power repeater and no remote in the DALI configuration.
+      items.push(addCtrl(lightType === 'rgbw' ? 'DA5M' : 'DA4m', count, tier))
+    } else {
+      // Analog RGB/RGBW (default, unchanged): V2 Controller + RT2 Remote.
+      items.push(addCtrl('V2 Controller', 1, tier))
+      items.push(addCtrl('RT2 Remote', 1, tier))
+    }
   }
 
   return items
@@ -652,9 +656,9 @@ export function calculateItem(item: CeilingItem, tier: PriceTier, installRate?: 
       const isLooped = item.lightingConfig === 'looped'
       let driverLines: LineItem[]
       if (isLooped) {
-        driverLines = buildDriverLines(totalRunningMeters * qty, item.lightType, effectiveTier, item.daliDriver, item.preferredDriverWatt, item.ledModuleType, item.dimmableWithoutDali)
+        driverLines = buildDriverLines(totalRunningMeters * qty, item.lightType, effectiveTier, item.daliDriver, item.preferredDriverWatt, item.ledModuleType, item.dimmableWithoutDali, item.rgbDali)
       } else {
-        driverLines = buildDriverLines(totalRunningMeters, item.lightType, effectiveTier, item.daliDriver, item.preferredDriverWatt, item.ledModuleType, item.dimmableWithoutDali)
+        driverLines = buildDriverLines(totalRunningMeters, item.lightType, effectiveTier, item.daliDriver, item.preferredDriverWatt, item.ledModuleType, item.dimmableWithoutDali, item.rgbDali)
         // Scale per-ceiling driver counts to the full quantity
         for (const dl of driverLines) {
           dl.qty = dl.qty * qty
@@ -754,7 +758,7 @@ function applyItemLooping(quote: Quote, tier: PriceTier, rate: number): ItemBrea
       : tier
     const driverLines = buildDriverLines(
       combinedModules, host.lightType, effectiveTier,
-      host.daliDriver, host.preferredDriverWatt, host.ledModuleType, host.dimmableWithoutDali,
+      host.daliDriver, host.preferredDriverWatt, host.ledModuleType, host.dimmableWithoutDali, host.rgbDali,
     )
     // Apply the host item's manual driver overrides to the combined lines.
     const overrides = host.driverOverrides ?? {}

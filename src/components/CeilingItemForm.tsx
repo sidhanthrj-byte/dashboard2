@@ -515,6 +515,29 @@ export default function CeilingItemForm({ item, index, priceTier, installRatePer
                   </p>
                 </div>
               )}
+              {/* Feature 3: RGB/RGBW — Analog vs DALI system */}
+              {(item.lightType === 'rgb' || item.lightType === 'rgbw') && (
+                <div>
+                  <label className="label">Driver System</label>
+                  <div className="flex gap-2 flex-wrap">
+                    {([[false, 'Analog (V2 + Repeater + Remote)'], [true, 'DALI (DA4M/DA5M per driver)']] as const).map(([val, label]) => (
+                      <button key={String(val)} type="button"
+                        onClick={() => onChange({ ...item, rgbDali: val, driverOverrides: {} })}
+                        className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all ${
+                          !!item.rgbDali === val
+                            ? 'border-[color:var(--ink)] bg-white text-[color:var(--ink)] shadow-[inset_3px_0_0_var(--accent)]'
+                            : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300'
+                        }`}
+                      >{label}</button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {item.rgbDali
+                      ? `DALI: one ${item.lightType === 'rgbw' ? 'DA5M' : 'DA4M'} controller per driver · no power repeater or remote.`
+                      : 'Analog: standard drivers + V2 Controller + remote (existing system).'}
+                  </p>
+                </div>
+              )}
               {(item.lightType === 'single_color' || item.lightType === 'tunable' || (item.lightType === 'single_color_dimmable' && item.dimmableWithoutDali)) && (
                 <div>
                   <label className="label">Driver Size</label>

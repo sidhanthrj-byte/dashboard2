@@ -65,6 +65,10 @@ export interface CeilingItem {
   // (standard drivers + EV1 repeaters + V1 controllers + RT1 remote). undefined
   // or false preserves the existing DALI-2 behaviour.
   dimmableWithoutDali?: boolean
+  // RGB / RGBW driver system: when true, use the DALI configuration (one DA4M/
+  // DA5M controller per driver, no repeater/remote). undefined/false = the
+  // existing analog system (V2 Controller + RT2 Remote).
+  rgbDali?: boolean
   marginMM?: number  // fabric margin per side in mm (smart: moved to cut axis if it would cause roll-width jump)
   printingRatePerSqm?: number  // override standard printing rate
   notes: string
